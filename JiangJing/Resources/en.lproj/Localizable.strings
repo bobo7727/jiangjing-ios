@@ -1,0 +1,61 @@
+/* JiangJing interface copy. */
+
+"perm.title" = "Use the camera as a magnifier";
+"perm.body" = "JiangJing turns the back camera into a magnifier so you can see jewelry, stitches, and small parts, then capture them to send on.";
+"perm.allow" = "Allow Camera";
+"perm.denied.title" = "Camera access is off";
+"perm.denied.body" = "Allow JiangJing to use the camera in Settings to keep magnifying.";
+"perm.settings" = "Open Settings";
+
+"camera.starting" = "Opening the camera…";
+"camera.none.title" = "No back camera";
+"camera.none.body" = "Use an iPhone with a back camera. The Simulator has no camera, so run this on a device.";
+"camera.stalled.title" = "No camera picture";
+"camera.stalled.body" = "The preview did not start. Try again, or check whether another app is using the camera.";
+"camera.retry" = "Try Again";
+
+"hint.gestures" = "Pinch to zoom · Tap to focus · Double-tap for 1×";
+"badge.closeup" = "Close focus";
+
+"torch.off" = "Light";
+"torch.low" = "Low";
+"torch.medium" = "Medium";
+"torch.high" = "Bright";
+"torch.unavailable.title" = "Light unavailable";
+"torch.unavailable.body" = "The flashlight cannot turn on right now. The phone may be cooling down, or this device has no torch.";
+
+"action.photo" = "Photo";
+"action.record" = "Record";
+"action.stop" = "Stop";
+"action.audio" = "Sound";
+"action.share" = "Share";
+"action.continue" = "Back to live";
+"action.close" = "Close";
+"action.settings" = "Settings";
+
+"capture.saving" = "Saving to Photos…";
+"capture.saved" = "Saved to Photos";
+"capture.saveDenied" = "Photos access is off. You can still share.";
+"capture.saveFailed" = "Could not save to Photos. You can still share.";
+"capture.notReady.title" = "Picture not ready";
+"capture.notReady.body" = "Wait until the preview settles, then shoot.";
+
+"record.failed.title" = "Recording failed";
+"record.failed.body" = "Try again. If it fails immediately, make sure the phone has free storage.";
+"record.shareHint" = "Send it to a customer or a friend";
+
+"audio.denied.title" = "Microphone access is off";
+"audio.denied.body" = "This recording will not include sound. You can allow the microphone in Settings.";
+
+"freeze.hint" = "The magnified frame you just captured";
+
+"a11y.zoom" = "Magnification";
+"a11y.photo" = "Capture the current view";
+"a11y.record" = "Start recording";
+"a11y.stop" = "Stop recording";
+"a11y.torch" = "Torch brightness";
+"a11y.audio.on" = "Record sound, on";
+"a11y.audio.off" = "Record sound, off";
+"a11y.share" = "Share";
+"a11y.continue" = "Return to the live view";
+"a11y.presets" = "Quick magnification";

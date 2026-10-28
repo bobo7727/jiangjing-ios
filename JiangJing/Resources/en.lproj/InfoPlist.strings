@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "Craft Magnifier";
+"NSCameraUsageDescription" = "The camera is used as a magnifier so you can see fine detail and capture photos and video.";
+"NSMicrophoneUsageDescription" = "The microphone is used only when you turn on sound for a video recording.";
+"NSPhotoLibraryAddUsageDescription" = "Photos and videos of the magnified view are saved to your library so you can send them to customers or friends.";

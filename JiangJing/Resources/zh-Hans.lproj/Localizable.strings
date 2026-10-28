@@ -1,0 +1,61 @@
+/* 匠镜界面文案。开发语言为简体中文。 */
+
+"perm.title" = "要用相机当放大镜";
+"perm.body" = "匠镜用后置相机把屏幕变成放大镜，方便看清首饰、线迹和细小零件，也可以拍下来发给别人。";
+"perm.allow" = "允许使用相机";
+"perm.denied.title" = "相机权限已关闭";
+"perm.denied.body" = "请在系统设置里允许匠镜使用相机，才能继续放大查看。";
+"perm.settings" = "去设置里打开";
+
+"camera.starting" = "正在打开相机…";
+"camera.none.title" = "没有可用的后置相机";
+"camera.none.body" = "请换一台有后置相机的 iPhone。模拟器没有相机，需要在真机上运行。";
+"camera.stalled.title" = "相机没有画面";
+"camera.stalled.body" = "画面迟迟没有出来。可以重试，或检查相机是否被其他应用占用。";
+"camera.retry" = "重试";
+
+"hint.gestures" = "双指缩放 · 轻点对焦 · 双击回到 1×";
+"badge.closeup" = "近摄";
+
+"torch.off" = "灯光";
+"torch.low" = "弱光";
+"torch.medium" = "中等";
+"torch.high" = "强光";
+"torch.unavailable.title" = "手电筒不可用";
+"torch.unavailable.body" = "这台设备现在打不开闪光灯，可能正在降温，或没有手电筒。";
+
+"action.photo" = "拍照";
+"action.record" = "录像";
+"action.stop" = "停止";
+"action.audio" = "声音";
+"action.share" = "分享";
+"action.continue" = "继续看";
+"action.close" = "关闭";
+"action.settings" = "去设置";
+
+"capture.saving" = "正在保存到相册…";
+"capture.saved" = "已保存到相册";
+"capture.saveDenied" = "没有相册权限，仍可以分享";
+"capture.saveFailed" = "没能保存到相册，仍可以分享";
+"capture.notReady.title" = "画面还没准备好";
+"capture.notReady.body" = "请等预览稳定后再拍。";
+
+"record.failed.title" = "录像没有成功";
+"record.failed.body" = "请再试一次。如果刚开始就失败，确认还有足够的存储空间。";
+"record.shareHint" = "可以发给客户或朋友";
+
+"audio.denied.title" = "没有麦克风权限";
+"audio.denied.body" = "这次录像不会收录声音。可以在设置里允许匠镜使用麦克风。";
+
+"freeze.hint" = "这是刚才放大的画面";
+
+"a11y.zoom" = "放大倍数";
+"a11y.photo" = "拍摄当前画面";
+"a11y.record" = "开始录像";
+"a11y.stop" = "停止录像";
+"a11y.torch" = "手电筒亮度";
+"a11y.audio.on" = "录像收录声音，已打开";
+"a11y.audio.off" = "录像不收录声音，已关闭";
+"a11y.share" = "分享";
+"a11y.continue" = "回到实时画面";
+"a11y.presets" = "快速放大倍数";

@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "匠镜";
+"NSCameraUsageDescription" = "需要使用相机，把屏幕当成放大镜，看清细小零件，并拍下照片和视频。";
+"NSMicrophoneUsageDescription" = "打开录像声音时，需要使用麦克风收录环境声。";
+"NSPhotoLibraryAddUsageDescription" = "需要把放大后的照片和视频保存到相册，方便发给客户或朋友。";
