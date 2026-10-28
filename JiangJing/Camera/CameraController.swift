@@ -77,7 +77,7 @@ final class CameraController: NSObject, ObservableObject {
 
     private let sessionQueue = DispatchQueue(label: "app.jiangjing.camera.session")
     private let frameQueue = DispatchQueue(label: "app.jiangjing.camera.frames")
-    private let logger = Logger(subsystem: "app.jiangjing.magnifier", category: "camera")
+    private let logger = Logger(subsystem: "com.jiangjing.magnifier", category: "camera")
     private let ciContext = CIContext()
 
     private let videoOutput = AVCaptureVideoDataOutput()

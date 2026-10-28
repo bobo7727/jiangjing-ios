@@ -1,0 +1,96 @@
+# 手动启动。步骤见 docs/codemagic.md。
+# 没有 triggering，push 不会自动开跑。先跑 ios-simulator 做编译检查，再跑 ios-testflight。
+workflows:
+  ios-simulator:
+    name: iOS simulator - compile check
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: "26.6"
+    scripts:
+      - name: Install XcodeGen and record the toolchain
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          git log -1 --format="Build commit: %H %s"
+          xcodebuild -version
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen --version
+          xcodegen generate
+          test -f JiangJing.xcodeproj/xcshareddata/xcschemes/JiangJing.xcscheme
+      - name: Build the unsigned simulator app
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          xcodebuild \
+            -project JiangJing.xcodeproj \
+            -scheme JiangJing \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$CM_BUILD_DIR/build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+          APP_PATH="$CM_BUILD_DIR/build/DerivedData/Build/Products/Debug-iphonesimulator/JiangJing.app"
+          test -d "$APP_PATH"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")
+          test "$BUNDLE_ID" = "com.jiangjing.magnifier"
+          mkdir -p "$CM_BUILD_DIR/build"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" \
+            "$CM_BUILD_DIR/build/JiangJing-ios-simulator.zip"
+    artifacts:
+      - build/JiangJing-ios-simulator.zip
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-testflight:
+    name: iOS signed release - TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: stl2stp-app-store-connect
+    environment:
+      xcode: "26.6"
+      groups:
+        - jiangjing_release
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.jiangjing.magnifier
+    scripts:
+      - name: Validate release inputs and generate the project
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          : "${APP_STORE_APPLE_ID:?Set the numeric Apple ID in the jiangjing_release variable group}"
+          [[ "$APP_STORE_APPLE_ID" =~ ^[0-9]+$ ]] || { echo 'APP_STORE_APPLE_ID must be numeric' >&2; exit 1; }
+          : "${PROJECT_BUILD_NUMBER:?Codemagic must provide PROJECT_BUILD_NUMBER}"
+          [[ "$PROJECT_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'PROJECT_BUILD_NUMBER must be a positive integer' >&2; exit 1; }
+          git log -1 --format="Build commit: %H %s"
+          xcodebuild -version
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen generate
+          test -f JiangJing.xcodeproj/xcshareddata/xcschemes/JiangJing.xcscheme
+          grep -q 'com.jiangjing.magnifier' JiangJing.xcodeproj/project.pbxproj
+      - name: Apply signing profiles and build number
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          xcode-project use-profiles
+          echo "Building IPA with Codemagic project build number: $PROJECT_BUILD_NUMBER"
+          xcrun agvtool new-version -all "$PROJECT_BUILD_NUMBER"
+      - name: Archive the signed IPA
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          xcode-project build-ipa \
+            --project JiangJing.xcodeproj \
+            --scheme JiangJing \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false

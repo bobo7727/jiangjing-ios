@@ -28,12 +28,12 @@
 1. 用数据线把 iPhone 连到 Mac，手机上点「信任」。
 2. 双击打开 `JiangJing.xcodeproj`。
 3. 左侧选中工程，再选中 **JiangJing** target，打开 **Signing & Capabilities**。
-4. 勾选 **Automatically manage signing**，在 **Team** 里选你的 Apple ID。没有的话，Xcode 会引导你登录。
+4. 勾选 **Automatically manage signing**。工程里的 Team 已设为 `G7LL8HDN83`。用这个团队的 Apple ID 登录；个人设备调试如果用不了这个团队，再临时改 Team。
 5. 顶部运行目标选你的 iPhone，不要选模拟器。按 Run（▶）。
 6. 若手机提示「不受信任的开发者」：打开 **设置 → 通用 → VPN 与设备管理**，信任你的开发者证书，再回到应用。
 7. 第一次打开会说明为什么需要相机。点允许后，系统还会再问一次，请允许相机。录音和保存到相册会在你真正用到时再问。
 
-Bundle ID 是 `app.jiangjing.magnifier`。如果和你账号里已有的 App 冲突，在 Signing 页面改成你自己的，例如 `com.你的名字.jiangjing`。
+Bundle ID 固定为 `com.jiangjing.magnifier`，和 Codemagic、App Store Connect 一致，不要改成别的。上传 TestFlight 的步骤见 [docs/codemagic.md](docs/codemagic.md)。
 
 ## 重新生成工程
 

@@ -1,6 +1,6 @@
 name: JiangJing
 options:
-  bundleIdPrefix: app.jiangjing
+  bundleIdPrefix: com.jiangjing
   deploymentTarget:
     iOS: "16.0"
   developmentLanguage: zh-Hans
@@ -17,6 +17,8 @@ settings:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: G7LL8HDN83
+    VERSIONING_SYSTEM: apple-generic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_EMIT_LOC_STRINGS: NO
     SUPPORTS_MACCATALYST: NO
@@ -31,7 +33,9 @@ targets:
           - Info.plist
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.jiangjing.magnifier
+        PRODUCT_BUNDLE_IDENTIFIER: com.jiangjing.magnifier
+        DEVELOPMENT_TEAM: G7LL8HDN83
+        VERSIONING_SYSTEM: apple-generic
         PRODUCT_NAME: JiangJing
         INFOPLIST_FILE: JiangJing/Info.plist
         GENERATE_INFOPLIST_FILE: NO
