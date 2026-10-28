@@ -9,17 +9,13 @@
 
 Bundle ID 固定为 `com.jiangjing.magnifier`。Team ID 为 `G7LL8HDN83`。`Info.plist` 里 `ITSAppUsesNonExemptEncryption` 为 false。`JiangJing/PrivacyInfo.xcprivacy` 声明不追踪、不收集数据。共享 scheme 在 `JiangJing.xcodeproj/xcshareddata/xcschemes/JiangJing.xcscheme`。
 
-这个仓库在 Cursor Origin 上。下面两种接法都可以，选你已经有的那一种，不必为了构建再复制一份仓库。
+Codemagic 应连接 GitHub 仓库 [bobo7727/jiangjing-ios](https://github.com/bobo7727/jiangjing-ios)，和 stl2stp 一样走 GitHub。Cursor Origin 仍是开发远程，不要改它的地址。
 
 ## 1. 把仓库接到 Codemagic
 
-用自己的 Codemagic 账号登录。工作流文件选仓库根的 `codemagic.yaml`，分支选含这份文件的分支（当前是 `main`）。
+用自己的 Codemagic 账号登录，安装并授权 GitHub 集成，选中私有仓库 **bobo7727/jiangjing-ios**。工作流文件用仓库根的 `codemagic.yaml`，分支选 `main`。私有仓库要把 Codemagic 的 GitHub 应用加进该仓库的访问权限。不要把本机的个人 SSH 私钥交给 Codemagic。
 
-**GitHub、GitLab 或 Bitbucket。** 如果这份代码已经在这三个网站之一，在 Codemagic 里装对应的集成并授权，然后选中仓库。私有仓库要把 Codemagic 加进该仓库的访问权限。不要把本机的个人 SSH 私钥交给 Codemagic。
-
-**通用 Git 地址加 SSH 密钥。** 如果代码只在 Cursor Origin，不要为了 Codemagic 再镜像到 GitHub。在 Codemagic 添加应用时选通过仓库 URL 连接。它会给出一把 SSH 公钥。把这把公钥配成该 Git 主机上的只读 Deploy Key，克隆地址用 SSH（`git@…`），不要用带密码的 HTTPS。Codemagic 只需要能读这个仓库。
-
-两种接法都不要在这个任务里新建账号或新建镜像。密钥和 API 私钥只放在 Codemagic，不写进 YAML，不提交 Git。
+密钥和 API 私钥只放在 Codemagic，不写进 YAML，不提交 Git。
 
 先手动启动 `ios-simulator`。zip 只说明能编译，不能装到 iPhone。通过后再启动 `ios-testflight`。
 
