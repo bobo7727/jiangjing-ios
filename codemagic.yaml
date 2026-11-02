@@ -92,5 +92,5 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
+        submit_to_testflight: false  # 只做内测；提交外部 Beta 审核会返回 422 并让构建失败（stl2stp 踩过）
         submit_to_app_store: false

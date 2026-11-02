@@ -67,3 +67,7 @@ stl2stp-app-store-connect
 参考：[App Store Connect 发布](https://docs.codemagic.io/yaml-publishing/app-store-connect/)、[YAML 基础配置](https://docs.codemagic.io/yaml-basic-configuration/yaml-getting-started/)。
 
 这份配置要在 Codemagic 的 Mac 上跑过才能确认签名和 TestFlight。这里没有 Xcode，不能代替那一步。
+
+## 内测分发说明
+
+`codemagic.yaml` 里设为 `submit_to_testflight: false`：Codemagic 只上传到 App Store Connect，不提交外部 Beta 审核（stl2stp 曾因该接口返回 HTTP 422 导致构建被标记失败）。每个新 build 处理完成后（十几分钟到半小时），需要在 App Store Connect 的 TestFlight → Internal Testing 组里手动添加该 build。
