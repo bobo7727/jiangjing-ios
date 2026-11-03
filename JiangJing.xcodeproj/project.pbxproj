@@ -81,6 +81,9 @@
 		EAF5DC14CE648CCC715119DA /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63F3FC6BAA5062DA691B05D4; };
 		176EC1CB4A55F21FA86E6BB6 /* PrivacyPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EB2A3A3DCF1CB79423F0D3A; };
 		B2FFE7492719201A07C737B1 = {isa = PBXBuildFile; fileRef = BA76EDB0E46A62EEAAC441E7; };
+		D83957C3AE6DF114DAC87B21 /* BackgroundTaskLifetime.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDFD1AA246CA0611824A6D86; };
+		5D7A8F22ED56A1CFF4D36BD4 /* LockedFrameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9313D2A7F4962206375E13C4; };
+		742CDA2990CBF5B7C3799965 /* CameraLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90AF9977320BAC395F6102D7; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -222,6 +225,9 @@
 		8EB2A3A3DCF1CB79423F0D3A /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyView.swift; sourceTree = "<group>"; };
 		BA76EDB0E46A62EEAAC441E7 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryModelTests.swift; sourceTree = "<group>"; };
 		1E843FA11555A8E9CF812052 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JiangJingTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDFD1AA246CA0611824A6D86 /* BackgroundTaskLifetime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTaskLifetime.swift; sourceTree = "<group>"; };
+		9313D2A7F4962206375E13C4 /* LockedFrameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockedFrameState.swift; sourceTree = "<group>"; };
+		90AF9977320BAC395F6102D7 /* CameraLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraLifecycleTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -247,6 +253,8 @@
 		177B17E86105ED5A2BE03F26 /* Camera */ = {
 			isa = PBXGroup;
 			children = (
+				CDFD1AA246CA0611824A6D86 /* BackgroundTaskLifetime.swift */,
+				9313D2A7F4962206375E13C4 /* LockedFrameState.swift */,
 				32710B35211F2763C4501EFE /* CaptureState.swift */,
 				5D3A2D3606ED1B20A0B7D547 /* CameraController.swift */,
 				890CEA106AE2461340A04F9F /* CameraPreviewView.swift */,
@@ -340,7 +348,7 @@
 			);
 			sourceTree = "<group>";
 		};
-		7EAC671F316862D2C71DCBA1 = {isa = PBXGroup; children = (BA76EDB0E46A62EEAAC441E7,); path = JiangJingTests; sourceTree = "<group>"; };
+		7EAC671F316862D2C71DCBA1 = {isa = PBXGroup; children = (BA76EDB0E46A62EEAAC441E7, 90AF9977320BAC395F6102D7,); path = JiangJingTests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXContainerItemProxy section */
@@ -438,6 +446,8 @@
 				EAF5DC14CE648CCC715119DA /* MediaLibraryView.swift in Sources */,
 				9B61AB862C371A59A8ED52A3 /* MediaLibraryModel.swift in Sources */,
 				B6A8896301E069F88A232470 /* MediaJournal.swift in Sources */,
+				D83957C3AE6DF114DAC87B21 /* BackgroundTaskLifetime.swift in Sources */,
+				5D7A8F22ED56A1CFF4D36BD4 /* LockedFrameState.swift in Sources */,
 				FD2075293E813BC71BC85562 /* CaptureState.swift in Sources */,
 				D979400AF31C00FE0ED2AEDA /* JiangJingApp.swift in Sources */,
 				E5B348E67664129058CD7585 /* CameraController.swift in Sources */,
@@ -455,7 +465,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		23D07F87414AE765699DFA62 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B2FFE7492719201A07C737B1,); runOnlyForDeploymentPostprocessing = 0; };
+		23D07F87414AE765699DFA62 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B2FFE7492719201A07C737B1, 742CDA2990CBF5B7C3799965,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXVariantGroup section */

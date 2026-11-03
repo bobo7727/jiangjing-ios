@@ -9,7 +9,10 @@ let package = Package(
             "App", "Features", "Resources", "Support", "Info.plist", "PrivacyInfo.xcprivacy",
             "Camera/CameraController.swift", "Camera/CameraPreviewView.swift", "Camera/PortraitRotation.swift",
             "Media/MediaLibraryModel.swift", "Media/PhotoLibrarySaver.swift"
-        ], sources: ["Camera/CaptureState.swift", "Media/MediaJournal.swift"]),
-        .testTarget(name: "RegressionTests", dependencies: ["CaptureCore"], path: "Tests/RegressionTests")
+        ], sources: ["Camera/CaptureState.swift", "Camera/BackgroundTaskLifetime.swift",
+                     "Camera/LockedFrameState.swift", "Media/MediaJournal.swift"]),
+        .testTarget(name: "RegressionTests", dependencies: ["CaptureCore"], path: "Tests/RegressionTests"),
+        .testTarget(name: "CameraLifecycleTests", dependencies: ["CaptureCore"], path: "JiangJingTests",
+                    exclude: ["MediaLibraryModelTests.swift"], sources: ["CameraLifecycleTests.swift"])
     ]
 )

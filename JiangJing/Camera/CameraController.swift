@@ -76,12 +76,7 @@ final class CameraController: NSObject, ObservableObject {
 
     private let videoOutput = AVCaptureVideoDataOutput()
     private let movieOutput = AVCaptureMovieFileOutput()
-    private let bufferLock = NSLock()
-    private var latestPixelBuffer: CVPixelBuffer?
-    // These three fields and latestPixelBuffer are protected by bufferLock.
-    private var acceptingFrames = false
-    private var frameGeneration = UUID()
-    private var didReportFirstFrame = false
+    private let frameState = LockedFrameState<CVPixelBuffer>()
     // sessionQueue only, including delegate handling forwarded to that queue.
     private var sessionGeneration = UUID()
     private var audioPreference = AudioPreference()
@@ -93,7 +88,7 @@ final class CameraController: NSObject, ObservableObject {
     @MainActor private var needsSessionRecovery = false
     @MainActor private var audioRequest = UUID()
     @MainActor private var activeRecording: MediaRecord?
-    @MainActor private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    @MainActor private var backgroundTask: BackgroundTaskLifetime<UIBackgroundTaskIdentifier>?
     @MainActor private let sessionObservers = NotificationBag()
 
     @MainActor init(library: MediaLibraryModel) {
@@ -199,7 +194,7 @@ final class CameraController: NSObject, ObservableObject {
         sessionQueue.async { [weak self] in
             guard let self else { return }
             self.sessionGeneration = token
-            self.setAcceptingFrames(false)
+            self.frameState.stopAccepting()
             // Reconfiguration must wait for the movie's finish callback.
             if self.recordingURL != nil {
                 self.pendingRebuild = (token, zoom, torch)
@@ -233,7 +228,7 @@ final class CameraController: NSObject, ObservableObject {
                         // while callbacks from the old generation are rejected.
                         self.installSessionObservers(generation: self.capture.generation)
                         self.sessionQueue.async { [weak self] in
-                            self?.setAcceptingFrames(false)
+                            self?.frameState.stopAccepting()
                             self?.requestRecordingStop()
                         }
                     }
@@ -246,25 +241,31 @@ final class CameraController: NSObject, ObservableObject {
     private func rebuild(generation: UUID, zoom: CGFloat, torch: TorchLevel) {
         dispatchPrecondition(condition: .onQueue(sessionQueue))
         guard wantsRunning, sessionGeneration == generation else { return }
-        setAcceptingFrames(false)
+        frameState.stopAccepting()
         if session.isRunning { session.stopRunning() }
         tearDownConfiguration()
         startIfNeeded(zoom: zoom, torch: torch)
     }
 
     @MainActor private func beginBackgroundTask() {
-        guard backgroundTask == .invalid else { return }
-        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Finish capture") { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                self.media.markInFlightUncertain()
-                self.endBackgroundTask()
-            }
+        guard backgroundTask == nil else { return }
+        let task = BackgroundTaskLifetime<UIBackgroundTaskIdentifier>(invalid: .invalid) {
+            UIApplication.shared.endBackgroundTask($0)
         }
-        Task { @MainActor [weak self] in
-            while let self, self.backgroundTask != .invalid {
-                if !self.isRecording && !self.isCapturingPhoto && !self.media.records.contains(where: { $0.saveState == .saving }) {
-                    self.endBackgroundTask()
+        backgroundTask = task
+        let media = media
+        let identifier = UIApplication.shared.beginBackgroundTask(withName: "Finish capture") { @MainActor @Sendable [weak self, task, media] in
+            guard task.expire(markUncertain: { media.markInFlightUncertain() }) else { return }
+            self?.clearBackgroundTask(task)
+        }
+        task.arm(identifier)
+        clearBackgroundTask(task)
+        Task { @MainActor [weak self, task] in
+            while !task.isEnded {
+                // Optional chaining releases the controller before the sleep.
+                if self?.hasPendingBackgroundWork != true {
+                    task.end()
+                    self?.clearBackgroundTask(task)
                     return
                 }
                 try? await Task.sleep(nanoseconds: 200_000_000)
@@ -272,11 +273,12 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    @MainActor private func endBackgroundTask() {
-        guard backgroundTask != .invalid else { return }
-        let task = backgroundTask
-        backgroundTask = .invalid
-        UIApplication.shared.endBackgroundTask(task)
+    @MainActor private var hasPendingBackgroundWork: Bool {
+        isRecording || isCapturingPhoto || media.records.contains(where: { $0.saveState == .saving })
+    }
+
+    @MainActor private func clearBackgroundTask(_ task: BackgroundTaskLifetime<UIBackgroundTaskIdentifier>) {
+        task.clearIfEnded(from: &backgroundTask)
     }
 
     @MainActor func updatePreviewSize(_ size: CGSize) {
@@ -419,9 +421,7 @@ final class CameraController: NSObject, ObservableObject {
         let generation = capture.generation
         frameQueue.async { [weak self] in
             guard let self else { return }
-            self.bufferLock.lock()
-            let buffer = self.frameGeneration == generation && self.acceptingFrames ? self.latestPixelBuffer : nil
-            self.bufferLock.unlock()
+            let buffer = self.frameState.snapshot(for: generation)
             let rendered = buffer.flatMap { self.render(buffer: $0, previewSize: size, to: url) }
             Task { @MainActor in
                 self.capture.finish()
@@ -454,15 +454,12 @@ final class CameraController: NSObject, ObservableObject {
         // Rotate video-data buffers before startRunning. Doing it later
         // rebuilds the capture pipeline on every frame's connection.
         configureConnections()
-        // Drain old delegate callbacks before arming this generation.
-        let frameToken = sessionGeneration
-        frameQueue.sync {
-            self.bufferLock.lock()
-            self.frameGeneration = frameToken
-            self.didReportFirstFrame = false
-            self.latestPixelBuffer = nil
-            self.acceptingFrames = true
-            self.bufferLock.unlock()
+        // Old queued callbacks run while acceptance is disabled. Arming is
+        // asynchronous so sessionQueue never waits for frame processing.
+        let generationToArm = sessionGeneration
+        let armToken = frameState.prepareToArm()
+        frameQueue.async { [frameState] in
+            frameState.arm(token: armToken, generation: generationToArm)
         }
         if !session.isRunning {
             session.startRunning()
@@ -484,8 +481,7 @@ final class CameraController: NSObject, ObservableObject {
 
     private func stopIfNeeded() {
         dispatchPrecondition(condition: .onQueue(sessionQueue))
-        setAcceptingFrames(false)
-        clearLatestBuffer()
+        frameState.stopAccepting()
         if recordingURL != nil {
             requestRecordingStop()
             return
@@ -575,7 +571,7 @@ final class CameraController: NSObject, ObservableObject {
         isConfigured = false
         didConfigureCodec = false
         didApplyDataRotation = false
-        clearLatestBuffer()
+        frameState.stopAccepting()
     }
 
     private func removeAllCaptureHardware() {
@@ -882,21 +878,6 @@ final class CameraController: NSObject, ObservableObject {
         if movieOutput.isRecording { movieOutput.stopRecording() }
     }
 
-    private func setAcceptingFrames(_ accepting: Bool) {
-        bufferLock.lock()
-        acceptingFrames = accepting
-        if !accepting {
-            latestPixelBuffer = nil
-        }
-        bufferLock.unlock()
-    }
-
-    private func clearLatestBuffer() {
-        bufferLock.lock()
-        latestPixelBuffer = nil
-        bufferLock.unlock()
-    }
-
     private func publishProblem(_ problem: CameraProblem) {
         let generation = sessionGeneration
         Task { @MainActor in
@@ -981,14 +962,7 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
         from connection: AVCaptureConnection
     ) {
         guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        bufferLock.lock()
-        let accept = acceptingFrames
-        let generation = frameGeneration
-        let reportReady = accept && !didReportFirstFrame
-        if accept { latestPixelBuffer = buffer }
-        if reportReady { didReportFirstFrame = true }
-        bufferLock.unlock()
-        guard reportReady else { return }
+        guard let generation = frameState.receive(buffer) else { return }
         Task { @MainActor in
             if self.capture.firstFrame(for: generation) {
                 self.problem = nil
@@ -1030,7 +1004,7 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
             self.recordingURL = nil
             self.recordingStopRequested = false
             if !self.wantsRunning, self.session.isRunning {
-                self.setAcceptingFrames(false)
+                self.frameState.stopAccepting()
                 self.session.stopRunning()
             }
             if let (generation, zoom, torch) = self.pendingRebuild {

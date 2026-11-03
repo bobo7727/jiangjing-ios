@@ -4,6 +4,8 @@
 
 ## 已实现
 
+- 相机生命周期复查修复：每个后台 assertion 使用独立的 `@MainActor BackgroundTaskLifetime`，覆盖 pending/armed/ended；到期同步结束有效 ID，再同步写入保存结果未知状态。正常结束、重复/过时代码路径不重复结束，控制器释放不阻止清理；旧任务只能清除自己。轮询条件和 200 ms 间隔保留，sleep 期间不强持有控制器。
+- 帧队列复查修复：移除 session queue 对 `frameQueue.sync` 的等待，避免阻塞及 AVFoundation 队列交互风险；仓库没有证明完整的应用层死锁环。`LockedFrameState` 在同一锁下禁用/清空、安装 token、校验 token 并启用代次；停止和新启动使旧 arming 无效，首帧及照片仍校验代次。配置和 `startRunning()` 保留在 session queue、锁外。
 - 编译问题：`CameraPreviewView.swift` 补 `SwiftUI`；畸变校正使用 Swift 属性 `isGeometricDistortionCorrectionEnabled`。
 - 采集：`CaptureState` 区分空闲、照片处理、录像启动、录像、结束；主 actor 校验入口，session queue 执行硬件命令。启动期间停止意图保留至启动回调；录像开始/结束回调按文件 URL 匹配。就绪、首帧、超时、权限与设备状态回调校验代次。中断、runtime error、media services reset 撤销就绪并恢复或显示错误。短暂 inactive 禁止新采集但保持 session；进入后台再停止。
 - 麦克风和灯光：用户录音偏好保留在 session queue，硬件重建尝试重新接入并发布实际结果；失败提示。KVO 同步补光灯实际可用/开启状态。变焦回调回到 session queue 校验设备；帧回调只在首帧通知 UI。
@@ -18,17 +20,20 @@
 
 | 检查 | 结果 | 证明范围 |
 | --- | --- | --- |
-| `python3 scripts/check-repository.py` | 通过 | plist、文案键/引用、图标 JSON、工程对象/源码归属、scheme、YAML 和内嵌 shell 语法；不是 Swift 类型检查 |
+| `python3 scripts/check-repository.py` | 通过 | plist、文案键/引用、图标 JSON、工程对象/源码归属、scheme、YAML、内嵌 shell 语法及禁止 `frameQueue.sync`；不是 Swift 类型检查 |
 | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Tests -p 'test_*.py' -v` | 5/5 通过 | 构建产物校验器的模拟夹具：完整产物通过，缺政策清单/本地化、提高最低系统版本会失败；缺发布网址时不修改 plist |
 | `git diff --check` | 通过 | 补丁空白检查 |
-| `swift test -Xswiftc -strict-concurrency=complete` | 无法执行，退出 127 | Linux 环境未安装 Swift，新增 8 个纯逻辑测试尚未运行 |
-| `xcodebuild -version` | 无法执行，退出 127 | 没有 Xcode；未生成或编译工程，新增 4 个 iOS 集成测试尚未运行 |
+| `swift test -Xswiftc -strict-concurrency=complete` | 无法执行，退出 127 | Linux 环境未安装 Swift；原有 8 个及新增 9 个生命周期/帧状态测试尚未运行 |
+| `xcodebuild -version` | 无法执行，退出 127 | 没有 Xcode；未编译工程，4 个媒体集成测试及共用的 9 个生命周期/帧状态测试尚未运行 |
+| `xcodegen --version` | 无法执行，退出 127 | 未安装 XcodeGen；已检查提交工程源码归属，重新生成后的归属验证待 Mac 执行 |
 
 `Tests/RegressionTests` 覆盖启动时停止、代次、就绪丢失、照片/录像互斥、音频偏好、保存 ID、重启恢复、损坏 sidecar、存储失败和重叠文件占用。`JiangJingTests` 可注入 Photos 延迟/失败及前后台状态，覆盖 A 保存失败时拍 B、保存期间尝试丢弃、后台延后保存、后台到期未知结果及重启后不自动重复保存。
 
+新增 `CameraLifecycleTests.swift` 同时注册到 Swift Package 和 iOS 测试 target，直接测试生产 helper：提前到期/提前完成、有效及无效 ID、重复结束、同步 end→mark、控制器所有者释放、重入结束和旧任务不清除新任务；阻塞帧队列后停止、旧 arming 被新 arming 替换、排队回调的代次边界。媒体集成测试还断言到期处理返回前 journal 已持久化 uncertain 状态。以上 Swift 测试均已添加，但未运行；原 journal 写入失败的错误报告路径未改。
+
 ## Mac 与真机待验收
 
-先只运行 `ios-simulator`，或按 README 在 Mac 生成工程与测试。检查 Debug 模拟器和 Release iphoneos 编译结果，逐条消除或解释完整并发诊断；当前仍不能承诺无并发告警。现有非 Sendable 控制器跨 GCD/Task 的捕获需要 SDK 实测诊断，未用 `@unchecked Sendable` 或关闭检查来掩盖。保留串行队列的前提是实际诊断和压力测试支持该选择。
+先本地验证提交工程，再按 README 用 XcodeGen 重新生成、运行 `python3 scripts/check-repository.py` 并重复测试/构建。检查 iOS 16.0 部署目标下 Debug 模拟器和 Release iphoneos 无签名构建，逐条消除或解释完整并发诊断；当前仍不能承诺无并发告警。现有非 Sendable 控制器跨 GCD/Task 的捕获需要 SDK 实测诊断，未对控制器添加 `@unchecked Sendable` 或关闭检查。新帧状态容器仅对私有状态全部由锁保护的 helper 声明 `@unchecked Sendable`；帧交付后只读。到期回调直接采用 SDK 的 `@MainActor @Sendable` 隔离，未引入 isolation bridge；SDK 兼容性待编译验证。保留串行队列的前提是实际诊断和压力测试支持该选择。
 
 至少在 iOS 16 和当前系统、单广角与支持近摄的机型执行以下项目，记录系统/机型/日志/输出文件。CI 使用可用的 iPhone 模拟器，不能据此声称运行过 iOS 16。
 
@@ -43,6 +48,7 @@
 | 上一视频被拒绝/失败后再录像 | 两段都保留；旧结果不改新横幅 |
 | 分享中关闭结果或打开媒体列表 | 文件占用结束前不能丢弃；分享冲突提示可重试 |
 | 后台到期、首次相册权限未决定 | 没有新的后台权限弹窗；记录保留，前台继续；无后台任务泄漏 |
+| 重复录像→后台→前台、延迟照片渲染、arming 排队期间停止/重启 | 有效 ID 只结束一次；到期同步结束并标记未知；旧 arming 不恢复帧接收，照片/保存代次行为不变 |
 | 磁盘不足、损坏记录、重启 | 明确提示；不自动删除唯一副本；不能恢复的录像有核验/丢弃入口 |
 | 预览 UIView 重建、分享 presenter 冲突 | 预览连接正常、手势有效；分享完成/取消正确释放文件占用 |
 | SE 尺寸、最大辅助字号、VoiceOver | 停止及关键动作可访问；不遮挡或截断 |

@@ -74,11 +74,14 @@ keys = set(re.findall(r'String\(localized: "([^"]+)"', (ROOT / 'JiangJing/Suppor
 assert keys == set(localizations['en']), (keys ^ set(localizations['en']))
 members = set(re.findall(r'static var (\w+): String', (ROOT / 'JiangJing/Support/L10n.swift').read_text()))
 for source in (ROOT / 'JiangJing').rglob('*.swift'):
-    uses = set(re.findall(r'L10n\.(\w+)', source.read_text()))
+    text = source.read_text()
+    assert not re.search(r'\bframeQueue\s*\.\s*sync\b', text), (source, 'Synchronous frame-queue wait')
+    uses = set(re.findall(r'L10n\.(\w+)', text))
     assert uses <= members, (source, uses - members)
 for path in (ROOT / 'JiangJing/Resources/Assets.xcassets').rglob('Contents.json'):
     json.loads(path.read_text())
 print('PASS: bilingual localization keys, L10n references, permission strings and asset JSON')
+print('PASS: no synchronous frameQueue waits in app sources')
 
 project = openstep((ROOT / 'JiangJing.xcodeproj/project.pbxproj').read_text())
 objects = project['objects']

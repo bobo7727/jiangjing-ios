@@ -61,8 +61,20 @@ final class MediaLibraryModelTests: XCTestCase {
         let task = Task { await library.save(record.id) }
         for _ in 0..<1_000 where completion == nil { await Task.yield() }
         guard let completion else { XCTFail("Save did not start"); task.cancel(); return }
-        library.markInFlightUncertain()
+        var ended = 0
+        let assertion = BackgroundTaskLifetime(invalid: -1) { _ in ended += 1 }
+        assertion.arm(1)
+        let expiration: @MainActor @Sendable () -> Void = {
+            assertion.expire {
+                XCTAssertEqual(ended, 1)
+                library.markInFlightUncertain()
+            }
+        }
+        expiration()
+        expiration() // A stale handler must not repeat cleanup.
+        XCTAssertEqual(ended, 1)
         XCTAssertEqual(library.record(record.id)?.saveState, .uncertain)
+        XCTAssertEqual(try journal.load().first { $0.id == record.id }?.saveState, .uncertain)
         XCTAssertFalse(library.canDiscard(record.id))
         completion.resume()
         await task.value
