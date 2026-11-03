@@ -13,6 +13,7 @@
 - 应用在前台时屏幕不自动锁定。
 - 拍照会截下当前放大后的画面（按屏幕上看到的比例裁切），冻结在屏幕上，保存到相册，并可以马上分享。
 - 录像保存放大后的画面，可选是否录音。录完后出现分享按钮，方便发到微信等应用。
+- “本机媒体”保留每次采集的文件及保存结果，可重试保存、分享或明确丢弃。关闭结果界面不会删除文件。
 - 大按钮，主要操作都在屏幕下半部，方便单手。
 
 ## 环境
@@ -40,8 +41,8 @@ Bundle ID 固定为 `com.jiangjing.magnifier`，和 Codemagic、App Store Connec
 仓库里已经带有可打开的 `JiangJing.xcodeproj`。`project.yml` 是同一份工程的描述，方便以后用 [XcodeGen](https://github.com/yonaskane/XcodeGen) 重新生成：
 
 ```bash
-brew install xcodegen
-xcodegen generate
+source scripts/install-xcodegen.sh
+"$XCODEGEN_BIN" generate
 open JiangJing.xcodeproj
 ```
 
@@ -56,7 +57,7 @@ open JiangJing.xcodeproj
 - 拍照会先把画面冻住。分享用系统分享面板，装了微信就可以从里面选微信。点「继续看」回到实时画面。
 - 录像是完整的 16:9 画面，左右可能比手机屏幕上看到的略宽一点。照片则按屏幕上的构图裁切。
 
-照片和视频只保存在这台手机的相册里，应用不会上传。
+照片和视频先保存在应用私有目录，再请求写入系统相册；保存失败或拒绝授权时仍可从“本机媒体”中重试或分享。本机副本保留至明确丢弃或卸载应用，已保存的副本也需自行清理。应用不向开发者上传媒体。系统相册及用户选择的分享服务可能按各自设置同步。
 
 ## 项目结构
 
@@ -67,7 +68,7 @@ JiangJing/
   App/                      入口。前台时关闭自动锁屏
   Camera/                   采集、变焦、对焦、手电筒、拍照、录像
   Features/                 放大镜界面、按钮、分享
-  Media/                    写入相册与临时文件
+  Media/                    相册写入、持久媒体记录和文件保留
   Support/                  文案、变焦换算、颜色
   Resources/                图标、中英文文案
   Info.plist                相机、麦克风、添加到相册的用途说明
@@ -90,3 +91,10 @@ JiangJing/
 - 竖屏锁定。手机平放在工件上方时，若跟着重力转画面，预览会乱转，所以固定为竖屏。
 - 近摄效果取决于机型。iPhone 13 Pro 及以后的 Pro，以及带双广角的机型效果更好。只有一颗广角镜头时，仍然可以数码放大，只是最近对焦距离更远。
 - 这个仓库是在没有 Xcode 的环境里写的，没有在 Mac 上实际编译，也没有在真机上点过相机、手电筒、保存和分享。请以 Xcode 编译结果为准。
+
+## 回归与验收
+
+当前变更和未完成验收见 [docs/implementation-validation.md](docs/implementation-validation.md)。
+可在 Linux 执行 `python3 scripts/check-repository.py`；有 Swift 5.9+ 时执行 `swift test`。
+iOS 集成测试需 Mac：重新生成工程后运行 `xcodebuild test -project JiangJing.xcodeproj -scheme JiangJing -destination 'platform=iOS Simulator,name=<可用的 iPhone 模拟器>'`。
+相机硬件仍需 iOS 16 和当前系统真机验证。静态检查不能证明 Swift 编译成功。

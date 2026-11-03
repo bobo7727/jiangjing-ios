@@ -37,6 +37,10 @@
 	<string>打开录像声音时，需要使用麦克风收录环境声。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>需要把放大后的照片和视频保存到相册，方便发给客户或朋友。</string>
+	<key>JiangJingPrivacyPolicyURL_en</key>
+	<string></string>
+	<key>JiangJingPrivacyPolicyURL_zh</key>
+	<string></string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

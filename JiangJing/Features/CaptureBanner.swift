@@ -1,8 +1,10 @@
 import SwiftUI
 import UIKit
 
+@MainActor
 struct ClipBanner: View {
     let clip: RecordedClip
+    @ObservedObject var library: MediaLibraryModel
     var onShare: () -> Void
     var onClose: () -> Void
     var onSettings: () -> Void
@@ -38,7 +40,7 @@ struct ClipBanner: View {
             }
             .buttonStyle(CraftButtonStyle())
             .accessibilityLabel(L10n.a11yShare)
-            if clip.saveState == .denied {
+            if library.record(clip.id)?.saveState == .denied {
                 Button(L10n.actionSettings, action: onSettings)
                     .buttonStyle(CraftButtonStyle(prominent: false))
             }
@@ -47,14 +49,7 @@ struct ClipBanner: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private var statusText: String {
-        switch clip.saveState {
-        case .saving: return L10n.captureSaving
-        case .saved: return L10n.captureSaved
-        case .denied: return L10n.captureSaveDenied
-        case .failed: return L10n.captureSaveFailed
-        }
-    }
+    private var statusText: String { (library.record(clip.id)?.saveState ?? .pending).message }
 
     @ViewBuilder
     private var thumbnail: some View {
@@ -76,8 +71,10 @@ struct ClipBanner: View {
     }
 }
 
+@MainActor
 struct FreezeOverlay: View {
     let photo: FrozenPhoto
+    @ObservedObject var library: MediaLibraryModel
     var onShare: () -> Void
     var onContinue: () -> Void
     var onSettings: () -> Void
@@ -97,7 +94,7 @@ struct FreezeOverlay: View {
                 }
                 .buttonStyle(CraftButtonStyle())
                 .accessibilityLabel(L10n.a11yShare)
-                if photo.saveState == .denied {
+                if library.record(photo.id)?.saveState == .denied {
                     Button(L10n.actionSettings, action: onSettings)
                         .buttonStyle(CraftButtonStyle(prominent: false))
                 }
@@ -110,12 +107,5 @@ struct FreezeOverlay: View {
         }
     }
 
-    private var statusText: String {
-        switch photo.saveState {
-        case .saving: return L10n.captureSaving
-        case .saved: return L10n.captureSaved
-        case .denied: return L10n.captureSaveDenied
-        case .failed: return L10n.captureSaveFailed
-        }
-    }
+    private var statusText: String { (library.record(photo.id)?.saveState ?? .pending).message }
 }

@@ -11,33 +11,24 @@ enum CameraProblem: Equatable {
     case noPreview
 }
 
-enum SaveState: Equatable {
-    case saving
-    case saved
-    case denied
-    case failed
-}
-
 struct FrozenPhoto: Identifiable, Equatable {
-    let id = UUID()
+    let id: UUID
     let image: UIImage
     let fileURL: URL
-    var saveState: SaveState
 
     static func == (lhs: FrozenPhoto, rhs: FrozenPhoto) -> Bool {
-        lhs.id == rhs.id && lhs.saveState == rhs.saveState
+        lhs.id == rhs.id
     }
 }
 
 struct RecordedClip: Identifiable, Equatable {
-    let id = UUID()
+    let id: UUID
     let url: URL
     let thumbnail: UIImage?
     let duration: TimeInterval
-    var saveState: SaveState
 
     static func == (lhs: RecordedClip, rhs: RecordedClip) -> Bool {
-        lhs.id == rhs.id && lhs.saveState == rhs.saveState
+        lhs.id == rhs.id
     }
 }
 
@@ -55,25 +46,28 @@ struct AppAlert: Identifiable {
 final class CameraController: NSObject, ObservableObject {
     let session = AVCaptureSession()
 
-    @Published private(set) var authorization = AVCaptureDevice.authorizationStatus(for: .video)
-    @Published private(set) var problem: CameraProblem?
-    @Published private(set) var isReady = false
-    @Published private(set) var zoomFactor: CGFloat = 1
-    @Published private(set) var minZoom: CGFloat = 1
-    @Published private(set) var maxZoom: CGFloat = 1
-    @Published private(set) var torchLevel: TorchLevel = .off
-    @Published private(set) var torchAvailable = false
-    @Published private(set) var usesCloseUpCamera = false
-    @Published private(set) var audioEnabled = false
-    @Published private(set) var isConfiguringAudio = false
-    @Published private(set) var canRecord = true
-    @Published private(set) var isRecording = false
-    @Published private(set) var recordingStartedAt: Date?
-    @Published private(set) var isCapturingPhoto = false
-    @Published var focusPoint: CGPoint?
-    @Published var frozenPhoto: FrozenPhoto?
-    @Published var recordedClip: RecordedClip?
-    @Published var alert: AppAlert?
+    @MainActor @Published private(set) var authorization = AVCaptureDevice.authorizationStatus(for: .video)
+    @MainActor @Published private(set) var problem: CameraProblem?
+    @MainActor @Published private(set) var capture = CaptureState()
+    @MainActor var isReady: Bool { capture.ready }
+    @MainActor var isRecording: Bool { capture.isRecording }
+    @MainActor var isCapturingPhoto: Bool { capture.phase == .photo }
+    @MainActor let media: MediaLibraryModel
+    @MainActor private var mediaChanges: AnyCancellable?
+    @MainActor @Published private(set) var zoomFactor: CGFloat = 1
+    @MainActor @Published private(set) var minZoom: CGFloat = 1
+    @MainActor @Published private(set) var maxZoom: CGFloat = 1
+    @MainActor @Published private(set) var torchLevel: TorchLevel = .off
+    @MainActor @Published private(set) var torchAvailable = false
+    @MainActor @Published private(set) var usesCloseUpCamera = false
+    @MainActor @Published private(set) var audioEnabled = false
+    @MainActor @Published private(set) var isConfiguringAudio = false
+    @MainActor @Published private(set) var canRecord = true
+    @MainActor @Published private(set) var recordingStartedAt: Date?
+    @MainActor @Published var focusPoint: CGPoint?
+    @MainActor @Published var frozenPhoto: FrozenPhoto?
+    @MainActor @Published var recordedClip: RecordedClip?
+    @MainActor @Published var alert: AppAlert?
 
     private let sessionQueue = DispatchQueue(label: "app.jiangjing.camera.session")
     private let frameQueue = DispatchQueue(label: "app.jiangjing.camera.frames")
@@ -84,17 +78,43 @@ final class CameraController: NSObject, ObservableObject {
     private let movieOutput = AVCaptureMovieFileOutput()
     private let bufferLock = NSLock()
     private var latestPixelBuffer: CVPixelBuffer?
+    // These three fields and latestPixelBuffer are protected by bufferLock.
     private var acceptingFrames = false
+    private var frameGeneration = UUID()
+    private var didReportFirstFrame = false
+    // sessionQueue only, including delegate handling forwarded to that queue.
+    private var sessionGeneration = UUID()
+    private var audioPreference = AudioPreference()
+    private var recordingStopRequested = false
+    private var recordingURL: URL?
+    private var pendingRebuild: (UUID, CGFloat, TorchLevel)?
+    @MainActor private var foreground = false
+    @MainActor private var interactive = false
+    @MainActor private var needsSessionRecovery = false
+    @MainActor private var audioRequest = UUID()
+    @MainActor private var activeRecording: MediaRecord?
+    @MainActor private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    @MainActor private let sessionObservers = NotificationBag()
+
+    @MainActor init(library: MediaLibraryModel) {
+        media = library
+        super.init()
+        mediaChanges = library.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
     private var videoDevice: AVCaptureDevice?
     private var audioInput: AVCaptureDeviceInput?
     private var zoomObservation: NSKeyValueObservation?
-    private weak var previewLayer: AVCaptureVideoPreviewLayer?
-    private var previewSize: CGSize = .zero
+    private var torchObservations: [NSKeyValueObservation] = []
+    private var requestedTorch: TorchLevel = .off
+    @MainActor private weak var previewLayer: AVCaptureVideoPreviewLayer?
+    @MainActor private var previewSize: CGSize = .zero
     private var isConfigured = false
     private var wantsRunning = false
-    private var pinchBaseline: CGFloat = 1
-    private var focusToken = 0
-    private var readyTimeoutToken = 0
+    @MainActor private var pinchBaseline: CGFloat = 1
+    @MainActor private var focusToken = 0
+    @MainActor private var readyTimeoutToken = 0
     private var didConfigureCodec = false
     private var didApplyDataRotation = false
     private var subjectAreaObserver: NSObjectProtocol?
@@ -102,26 +122,51 @@ final class CameraController: NSObject, ObservableObject {
 
     deinit {
         zoomObservation?.invalidate()
+        torchObservations.forEach { $0.invalidate() }
         if let subjectAreaObserver {
             NotificationCenter.default.removeObserver(subjectAreaObserver)
         }
     }
 
-    func onForeground() {
+    @MainActor func onForeground() {
+        interactive = true
         authorization = AVCaptureDevice.authorizationStatus(for: .video)
-        guard authorization == .authorized else { return }
+        Task { await media.resumePending() }
+        if foreground && needsSessionRecovery {
+            needsSessionRecovery = false
+            restart()
+        }
+        guard authorization == .authorized, !foreground else { return }
+        foreground = true
+        problem = nil
+        let token = capture.resume()
+        installSessionObservers(generation: token)
         scheduleReadyTimeout()
         let zoom = zoomFactor
         let torch = torchLevel
         sessionQueue.async { [weak self] in
             guard let self else { return }
             self.wantsRunning = true
+            self.sessionGeneration = token
             self.startIfNeeded(zoom: zoom, torch: torch)
         }
     }
 
-    func onBackground() {
+    /// Transient inactive (permission sheets, Control Center) blocks new capture
+    /// and authorizations but does not tear down an otherwise running session.
+    @MainActor func onInactive() { interactive = false }
+
+    @MainActor func onBackground() {
+        interactive = false
+        foreground = false
+        audioRequest = UUID()
+        isConfiguringAudio = false
         readyTimeoutToken += 1
+        capture.suspend()
+        // Must precede the asynchronous stop, including a recorder still starting.
+        if isRecording || isCapturingPhoto || media.records.contains(where: { $0.saveState == .saving }) {
+            beginBackgroundTask()
+        }
         sessionQueue.async { [weak self] in
             guard let self else { return }
             self.wantsRunning = false
@@ -129,49 +174,124 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    func requestCameraAccess() {
+    @MainActor func requestCameraAccess() {
+        let request = capture.generation
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.capture.generation == request else { return }
                 self.authorization = AVCaptureDevice.authorizationStatus(for: .video)
-                if granted {
-                    self.onForeground()
-                }
+                if granted, self.interactive { self.onForeground() }
             }
         }
     }
 
-    func restart() {
+    @MainActor func restart() {
+        guard foreground, interactive else { return }
         problem = nil
-        isReady = false
+        needsSessionRecovery = false
+        audioRequest = UUID()
+        isConfiguringAudio = false
+        let token = capture.invalidate()
+        capture.requestStop()
+        installSessionObservers(generation: token)
         let zoom = zoomFactor
         let torch = torchLevel
         sessionQueue.async { [weak self] in
             guard let self else { return }
-            self.wantsRunning = true
-            if self.session.isRunning {
-                self.setAcceptingFrames(false)
-                self.session.stopRunning()
+            self.sessionGeneration = token
+            self.setAcceptingFrames(false)
+            // Reconfiguration must wait for the movie's finish callback.
+            if self.recordingURL != nil {
+                self.pendingRebuild = (token, zoom, torch)
+                self.requestRecordingStop()
+            } else {
+                self.rebuild(generation: token, zoom: zoom, torch: torch)
             }
-            self.tearDownConfiguration()
-            self.startIfNeeded(zoom: zoom, torch: torch)
         }
         scheduleReadyTimeout()
     }
 
-    func updatePreviewSize(_ size: CGSize) {
+    @MainActor private func installSessionObservers(generation: UUID) {
+        sessionObservers.clear()
+        for name in [AVCaptureSession.wasInterruptedNotification,
+                     AVCaptureSession.interruptionEndedNotification,
+                     AVCaptureSession.runtimeErrorNotification] {
+            let observer = NotificationCenter.default.addObserver(forName: name, object: session, queue: .main) { [weak self] note in
+                let isReset = (note.userInfo?[AVCaptureSessionErrorKey] as? AVError)?.code == .mediaServicesWereReset
+                Task { @MainActor in
+                    guard let self, self.foreground, self.capture.generation == generation else { return }
+                    if name == AVCaptureSession.interruptionEndedNotification || isReset {
+                        if self.interactive { self.restart() }
+                        else { self.needsSessionRecovery = true }
+                    } else {
+                        self.capture.invalidate()
+                        self.audioRequest = UUID()
+                        self.isConfiguringAudio = false
+                        self.capture.requestStop()
+                        self.problem = .noPreview
+                        // New observers allow the matching interruption-ended event
+                        // while callbacks from the old generation are rejected.
+                        self.installSessionObservers(generation: self.capture.generation)
+                        self.sessionQueue.async { [weak self] in
+                            self?.setAcceptingFrames(false)
+                            self?.requestRecordingStop()
+                        }
+                    }
+                }
+            }
+            sessionObservers.tokens.append(observer)
+        }
+    }
+
+    private func rebuild(generation: UUID, zoom: CGFloat, torch: TorchLevel) {
+        dispatchPrecondition(condition: .onQueue(sessionQueue))
+        guard wantsRunning, sessionGeneration == generation else { return }
+        setAcceptingFrames(false)
+        if session.isRunning { session.stopRunning() }
+        tearDownConfiguration()
+        startIfNeeded(zoom: zoom, torch: torch)
+    }
+
+    @MainActor private func beginBackgroundTask() {
+        guard backgroundTask == .invalid else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Finish capture") { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.media.markInFlightUncertain()
+                self.endBackgroundTask()
+            }
+        }
+        Task { @MainActor [weak self] in
+            while let self, self.backgroundTask != .invalid {
+                if !self.isRecording && !self.isCapturingPhoto && !self.media.records.contains(where: { $0.saveState == .saving }) {
+                    self.endBackgroundTask()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+        }
+    }
+
+    @MainActor private func endBackgroundTask() {
+        guard backgroundTask != .invalid else { return }
+        let task = backgroundTask
+        backgroundTask = .invalid
+        UIApplication.shared.endBackgroundTask(task)
+    }
+
+    @MainActor func updatePreviewSize(_ size: CGSize) {
         guard abs(size.width - previewSize.width) > 0.5 || abs(size.height - previewSize.height) > 0.5 else {
             return
         }
         previewSize = size
     }
 
-    func attachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
+    @MainActor func attachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
         previewLayer = layer
         PortraitRotation.apply(to: layer.connection)
     }
 
-    func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+    @MainActor func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
         switch recognizer.state {
         case .began:
             pinchBaseline = zoomFactor
@@ -182,7 +302,7 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    func focus(at viewPoint: CGPoint) {
+    @MainActor func focus(at viewPoint: CGPoint) {
         guard let layer = previewLayer else { return }
         let devicePoint = layer.captureDevicePointConverted(fromLayerPoint: viewPoint)
         guard (0...1).contains(devicePoint.x), (0...1).contains(devicePoint.y) else { return }
@@ -194,12 +314,12 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    func resetZoom() {
+    @MainActor func resetZoom() {
         let target = ZoomScale.clamp(1, min: minZoom, max: maxZoom)
         setZoom(target, animated: true)
     }
 
-    func setZoom(_ requested: CGFloat, animated: Bool) {
+    @MainActor func setZoom(_ requested: CGFloat, animated: Bool) {
         let clamped = ZoomScale.clamp(requested, min: minZoom, max: maxZoom)
         zoomFactor = clamped
         sessionQueue.async { [weak self] in
@@ -207,111 +327,120 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    func cycleTorch() {
+    @MainActor func cycleTorch() {
         guard torchAvailable else {
             alert = AppAlert(title: L10n.torchUnavailableTitle, message: L10n.torchUnavailableBody)
             return
         }
         let next = torchLevel.next
-        torchLevel = next
         sessionQueue.async { [weak self] in
             self?.applyTorch(next)
         }
     }
 
-    func setAudioEnabled(_ enabled: Bool) {
-        guard !isRecording, !isConfiguringAudio else { return }
-        if !enabled {
-            audioEnabled = false
-            let zoom = zoomFactor
-            let torch = torchLevel
-            sessionQueue.async { [weak self] in
-                self?.removeAudioInput(zoom: zoom, torch: torch)
-            }
-            return
-        }
+    @MainActor func setAudioEnabled(_ enabled: Bool) {
+        guard interactive, !isRecording, !isCapturingPhoto, !isConfiguringAudio else { return }
         isConfiguringAudio = true
+        let request = UUID()
+        audioRequest = request
+        let generation = capture.generation
         let zoom = zoomFactor
         let torch = torchLevel
-        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
-            Task { @MainActor in
-                guard let self else { return }
-                guard granted else {
-                    self.isConfiguringAudio = false
-                    self.audioEnabled = false
-                    self.alert = AppAlert(title: L10n.audioDeniedTitle, message: L10n.audioDeniedBody)
-                    return
+        Task { @MainActor in
+            let granted = enabled ? await self.awaitMicrophoneAccess() : true
+            // The async permission callback may belong to a previous session.
+            guard self.audioRequest == request, self.capture.generation == generation,
+                  self.foreground else { return }
+            guard granted else {
+                self.isConfiguringAudio = false
+                self.audioEnabled = false
+                self.alert = AppAlert(title: L10n.audioDeniedTitle, message: L10n.audioDeniedBody)
+                return
+            }
+            self.sessionQueue.async { [weak self] in
+                guard let self, self.sessionGeneration == generation else { return }
+                self.audioPreference.select(enabled)
+                let added: Bool
+                if enabled {
+                    added = self.addAudioInput(zoom: zoom, torch: torch)
+                } else {
+                    self.removeAudioInput(zoom: zoom, torch: torch)
+                    added = false
                 }
-                self.sessionQueue.async { [weak self] in
-                    let added = self?.addAudioInput(zoom: zoom, torch: torch) ?? false
-                    Task { @MainActor in
-                        self?.isConfiguringAudio = false
-                        self?.audioEnabled = added
-                        if !added {
-                            self?.alert = AppAlert(title: L10n.audioDeniedTitle, message: L10n.audioDeniedBody)
-                        }
+                Task { @MainActor in
+                    guard self.audioRequest == request, self.capture.generation == generation else { return }
+                    self.isConfiguringAudio = false
+                    self.audioEnabled = added
+                    if enabled && !added {
+                        self.alert = AppAlert(title: L10n.audioDeniedTitle, message: L10n.audioDeniedBody)
                     }
                 }
             }
         }
     }
 
-    func toggleRecording() {
-        if isRecording {
-            sessionQueue.async { [weak self] in
-                guard let self, self.movieOutput.isRecording else { return }
-                self.movieOutput.stopRecording()
-            }
-            return
-        }
-        guard isReady, frozenPhoto == nil else { return }
-        isRecording = true
-        sessionQueue.async { [weak self] in
-            self?.beginRecording()
+    @MainActor private func awaitMicrophoneAccess() async -> Bool {
+        await withCheckedContinuation { continuation in
+            AVCaptureDevice.requestAccess(for: .audio) { continuation.resume(returning: $0) }
         }
     }
 
-    func capturePhoto() {
-        guard isReady, !isRecording, !isCapturingPhoto, frozenPhoto == nil else { return }
-        isCapturingPhoto = true
+    @MainActor func toggleRecording() {
+        if isRecording {
+            capture.requestStop()
+            sessionQueue.async { [weak self] in self?.requestRecordingStop() }
+            return
+        }
+        guard interactive, canRecord, !isConfiguringAudio, frozenPhoto == nil,
+              capture.beginRecording() else { return }
+        do {
+            let record = try media.reserve(.video)
+            activeRecording = record
+            let url = media.url(for: record)
+            let generation = capture.generation
+            sessionQueue.async { [weak self] in self?.beginRecording(to: url, generation: generation) }
+        } catch {
+            capture.finish()
+            alert = AppAlert(title: L10n.recordFailedTitle, message: L10n.recordFailedBody)
+        }
+    }
+
+    @MainActor func capturePhoto() {
+        guard interactive, !isConfiguringAudio, frozenPhoto == nil, capture.beginPhoto() else { return }
+        let record: MediaRecord
+        do { record = try media.reserve(.photo) }
+        catch {
+            capture.finish()
+            alert = AppAlert(title: L10n.recordFailedTitle, message: L10n.recordFailedBody)
+            return
+        }
+        let url = media.url(for: record)
         let size = previewSize
+        let generation = capture.generation
         frameQueue.async { [weak self] in
             guard let self else { return }
             self.bufferLock.lock()
-            let buffer = self.latestPixelBuffer
+            let buffer = self.frameGeneration == generation && self.acceptingFrames ? self.latestPixelBuffer : nil
             self.bufferLock.unlock()
-            guard let buffer, let rendered = self.render(buffer: buffer, previewSize: size) else {
-                Task { @MainActor in
-                    self.isCapturingPhoto = false
-                    self.alert = AppAlert(title: L10n.captureNotReadyTitle, message: L10n.captureNotReadyBody)
-                }
-                return
-            }
+            let rendered = buffer.flatMap { self.render(buffer: $0, previewSize: size, to: url) }
             Task { @MainActor in
-                self.isCapturingPhoto = false
-                self.frozenPhoto = FrozenPhoto(
-                    image: rendered.image,
-                    fileURL: rendered.url,
-                    saveState: .saving
-                )
-                await self.saveFrozenPhoto(data: rendered.data)
+                self.capture.finish()
+                self.media.finish(record.id, complete: rendered != nil)
+                guard let rendered else {
+                    self.alert = AppAlert(title: L10n.captureNotReadyTitle, message: L10n.captureNotReadyBody)
+                    return
+                }
+                // Keep the media even if the app was backgrounded while rendering.
+                if self.capture.generation == generation {
+                    self.frozenPhoto = FrozenPhoto(id: record.id, image: rendered, fileURL: url)
+                }
+                await self.media.save(record.id)
             }
         }
     }
 
-    func dismissFreeze() {
-        FileStore.remove(frozenPhoto?.fileURL)
-        frozenPhoto = nil
-    }
-
-    func dismissClip() {
-        guard let clip = recordedClip else { return }
-        recordedClip = nil
-        // The photo library may still be reading the file. The save completion deletes it.
-        if clip.saveState != .saving {
-            FileStore.remove(clip.url)
-        }
-    }
+    @MainActor func dismissFreeze() { frozenPhoto = nil }
+    @MainActor func dismissClip() { recordedClip = nil }
 
     // MARK: - Session
 
@@ -325,7 +454,16 @@ final class CameraController: NSObject, ObservableObject {
         // Rotate video-data buffers before startRunning. Doing it later
         // rebuilds the capture pipeline on every frame's connection.
         configureConnections()
-        setAcceptingFrames(true)
+        // Drain old delegate callbacks before arming this generation.
+        let frameToken = sessionGeneration
+        frameQueue.sync {
+            self.bufferLock.lock()
+            self.frameGeneration = frameToken
+            self.didReportFirstFrame = false
+            self.latestPixelBuffer = nil
+            self.acceptingFrames = true
+            self.bufferLock.unlock()
+        }
         if !session.isRunning {
             session.startRunning()
         }
@@ -335,7 +473,9 @@ final class CameraController: NSObject, ObservableObject {
         applyZoom(zoom, animated: false)
         applyTorch(torch)
         let running = session.isRunning
+        let generation = sessionGeneration
         Task { @MainActor in
+            guard self.capture.generation == generation else { return }
             if !running, self.problem == nil {
                 self.problem = .noPreview
             }
@@ -346,8 +486,8 @@ final class CameraController: NSObject, ObservableObject {
         dispatchPrecondition(condition: .onQueue(sessionQueue))
         setAcceptingFrames(false)
         clearLatestBuffer()
-        if movieOutput.isRecording {
-            movieOutput.stopRecording()
+        if recordingURL != nil {
+            requestRecordingStop()
             return
         }
         if session.isRunning {
@@ -368,6 +508,7 @@ final class CameraController: NSObject, ObservableObject {
         session.addInput(input)
         videoDevice = device
         observeZoom(on: device)
+        observeTorch(on: device)
 
         videoOutput.alwaysDiscardsLateVideoFrames = true
         let pixelFormat: [String: Any] = [
@@ -395,11 +536,22 @@ final class CameraController: NSObject, ObservableObject {
         session.commitConfiguration()
         configureDevice(device)
         isConfigured = true
+        let requestedAudio = audioPreference.requested
+        let actualAudio = audioPreference.restore {
+            addAudioInput(zoom: device.videoZoomFactor, torch: .off)
+        }
+        let generation = sessionGeneration
 
         let closeUp = deviceSupportsCloseFocus(device)
-        let hasTorch = device.hasTorch
+        let hasTorch = device.hasTorch && device.isTorchAvailable
         logger.info("Camera \(device.deviceType.rawValue, privacy: .public) closeUp=\(closeUp ? "yes" : "no", privacy: .public)")
         Task { @MainActor in
+            guard self.capture.generation == generation else { return }
+            self.audioEnabled = actualAudio
+            self.isConfiguringAudio = false
+            if requestedAudio && !actualAudio {
+                self.alert = AppAlert(title: L10n.audioDeniedTitle, message: L10n.audioDeniedBody)
+            }
             self.usesCloseUpCamera = closeUp
             self.torchAvailable = hasTorch
             self.canRecord = movieAdded
@@ -412,6 +564,8 @@ final class CameraController: NSObject, ObservableObject {
         removeAllCaptureHardware()
         zoomObservation?.invalidate()
         zoomObservation = nil
+        torchObservations.forEach { $0.invalidate() }
+        torchObservations = []
         if let subjectAreaObserver {
             NotificationCenter.default.removeObserver(subjectAreaObserver)
             self.subjectAreaObserver = nil
@@ -479,7 +633,7 @@ final class CameraController: NSObject, ObservableObject {
             }
             device.isSubjectAreaChangeMonitoringEnabled = true
             if device.isGeometricDistortionCorrectionSupported {
-                device.geometricDistortionCorrectionEnabled = true
+                device.isGeometricDistortionCorrectionEnabled = true
             }
             if device.isVirtualDevice,
                device.activePrimaryConstituentDeviceSwitchingBehavior != .unsupported {
@@ -492,7 +646,9 @@ final class CameraController: NSObject, ObservableObject {
             let range = zoomRange(for: device)
             let initial = ZoomScale.clamp(1, min: range.min, max: range.max)
             device.videoZoomFactor = initial
+            let generation = sessionGeneration
             Task { @MainActor in
+                guard self.capture.generation == generation else { return }
                 self.minZoom = range.min
                 self.maxZoom = range.max
                 self.zoomFactor = initial
@@ -513,7 +669,7 @@ final class CameraController: NSObject, ObservableObject {
             queue: nil
         ) { [weak self] _ in
             self?.sessionQueue.async { [weak self] in
-                guard let self, Date() > self.ignoreSubjectFocusUntil else { return }
+                guard let self, self.videoDevice === device, Date() > self.ignoreSubjectFocusUntil else { return }
                 self.ignoreSubjectFocusUntil = Date().addingTimeInterval(1)
                 self.applyFocus(at: CGPoint(x: 0.5, y: 0.5))
             }
@@ -549,10 +705,45 @@ final class CameraController: NSObject, ObservableObject {
 
     private func observeZoom(on device: AVCaptureDevice) {
         zoomObservation = device.observe(\.videoZoomFactor, options: [.new]) { [weak self] device, _ in
-            let factor = device.videoZoomFactor
-            Task { @MainActor in
-                self?.zoomFactor = factor
+            self?.sessionQueue.async { [weak self] in
+                guard let self, self.videoDevice === device else { return }
+                let factor = device.videoZoomFactor
+                let generation = self.sessionGeneration
+                Task { @MainActor in
+                    guard self.capture.generation == generation else { return }
+                    if self.zoomFactor != factor { self.zoomFactor = factor }
+                }
             }
+        }
+    }
+
+    private func observeTorch(on device: AVCaptureDevice) {
+        torchObservations = [
+            device.observe(\.isTorchAvailable, options: [.new]) { [weak self] device, _ in
+                self?.queueTorchState(for: device)
+            },
+            device.observe(\.isTorchActive, options: [.new]) { [weak self] device, _ in
+                self?.queueTorchState(for: device)
+            }
+        ]
+    }
+
+    private func queueTorchState(for device: AVCaptureDevice) {
+        sessionQueue.async { [weak self] in
+            guard let self, self.videoDevice === device else { return }
+            self.publishTorchState()
+        }
+    }
+
+    private func publishTorchState() {
+        dispatchPrecondition(condition: .onQueue(sessionQueue))
+        let available = videoDevice?.isTorchAvailable == true
+        let level = videoDevice?.isTorchActive == true ? requestedTorch : .off
+        let generation = sessionGeneration
+        Task { @MainActor in
+            guard self.capture.generation == generation else { return }
+            if self.torchAvailable != available { self.torchAvailable = available }
+            if self.torchLevel != level { self.torchLevel = level }
         }
     }
 
@@ -577,34 +768,32 @@ final class CameraController: NSObject, ObservableObject {
 
     private func applyTorch(_ level: TorchLevel) {
         dispatchPrecondition(condition: .onQueue(sessionQueue))
-        guard let device = videoDevice, device.hasTorch else {
-            Task { @MainActor in self.torchAvailable = false }
-            return
-        }
+        requestedTorch = level
+        defer { publishTorchState() }
+        guard let device = videoDevice, device.hasTorch else { return }
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
             if level == .off {
-                if device.isTorchAvailable {
-                    device.torchMode = .off
-                }
-                return
+                device.torchMode = .off
+            } else if device.isTorchAvailable {
+                try device.setTorchModeOn(level: min(level.brightness, AVCaptureDevice.maxAvailableTorchLevel))
+            } else {
+                requestedTorch = .off
+                publishTorchFailure()
             }
-            guard device.isTorchAvailable else {
-                Task { @MainActor in
-                    self.torchLevel = .off
-                    self.alert = AppAlert(title: L10n.torchUnavailableTitle, message: L10n.torchUnavailableBody)
-                }
-                return
-            }
-            let brightness = min(level.brightness, AVCaptureDevice.maxAvailableTorchLevel)
-            try device.setTorchModeOn(level: brightness)
         } catch {
+            requestedTorch = .off
             logger.error("Torch failed: \(error.localizedDescription, privacy: .public)")
-            Task { @MainActor in
-                self.torchLevel = .off
-                self.alert = AppAlert(title: L10n.torchUnavailableTitle, message: L10n.torchUnavailableBody)
-            }
+            publishTorchFailure()
+        }
+    }
+
+    private func publishTorchFailure() {
+        let generation = sessionGeneration
+        Task { @MainActor in
+            guard self.capture.generation == generation else { return }
+            self.alert = AppAlert(title: L10n.torchUnavailableTitle, message: L10n.torchUnavailableBody)
         }
     }
 
@@ -667,19 +856,30 @@ final class CameraController: NSObject, ObservableObject {
         applyTorch(torch)
     }
 
-    private func beginRecording() {
+    private func beginRecording(to url: URL, generation: UUID) {
         dispatchPrecondition(condition: .onQueue(sessionQueue))
-        guard !movieOutput.isRecording else { return }
-        guard session.outputs.contains(where: { $0 === movieOutput }) else {
+        guard wantsRunning, sessionGeneration == generation, recordingURL == nil,
+              session.isRunning, session.outputs.contains(where: { $0 === movieOutput }) else {
             Task { @MainActor in
-                self.isRecording = false
+                guard let record = self.activeRecording, self.media.url(for: record) == url else { return }
+                self.media.finish(record.id, complete: false)
+                self.activeRecording = nil
+                self.capture.finish()
                 self.alert = AppAlert(title: L10n.recordFailedTitle, message: L10n.recordFailedBody)
             }
             return
         }
+        recordingStopRequested = false
+        recordingURL = url
         PortraitRotation.apply(to: movieOutput.connection(with: .video))
-        let url = FileStore.makeURL(ext: "mov")
         movieOutput.startRecording(to: url, recordingDelegate: self)
+    }
+
+    private func requestRecordingStop() {
+        dispatchPrecondition(condition: .onQueue(sessionQueue))
+        guard recordingURL != nil else { return }
+        recordingStopRequested = true
+        if movieOutput.isRecording { movieOutput.stopRecording() }
     }
 
     private func setAcceptingFrames(_ accepting: Bool) {
@@ -698,24 +898,27 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     private func publishProblem(_ problem: CameraProblem) {
+        let generation = sessionGeneration
         Task { @MainActor in
+            guard self.capture.generation == generation else { return }
             self.problem = problem
         }
     }
 
-    private func scheduleReadyTimeout() {
+    @MainActor private func scheduleReadyTimeout() {
         readyTimeoutToken += 1
         let token = readyTimeoutToken
+        let generation = capture.generation
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(MagnifierConfig.readyTimeout * 1_000_000_000.0))
-            guard self.readyTimeoutToken == token, !self.isReady, self.authorization == .authorized else { return }
+            guard self.capture.generation == generation, self.foreground, self.readyTimeoutToken == token, !self.isReady, self.authorization == .authorized else { return }
             if self.problem == nil {
                 self.problem = .noPreview
             }
         }
     }
 
-    private func showFocusIndicator(at point: CGPoint) {
+    @MainActor private func showFocusIndicator(at point: CGPoint) {
         focusToken += 1
         let token = focusToken
         focusPoint = point
@@ -728,7 +931,7 @@ final class CameraController: NSObject, ObservableObject {
 
     // MARK: - Still image
 
-    private func render(buffer: CVPixelBuffer, previewSize: CGSize) -> (image: UIImage, data: Data, url: URL)? {
+    private func render(buffer: CVPixelBuffer, previewSize: CGSize, to url: URL) -> UIImage? {
         var image = CIImage(cvPixelBuffer: buffer)
         // Portrait rotation is requested on the connection. If a device still
         // delivers a landscape buffer, rotate the back camera upright.
@@ -751,51 +954,13 @@ final class CameraController: NSObject, ObservableObject {
         guard let cgImage = ciContext.createCGImage(image, from: image.extent) else { return nil }
         let uiImage = UIImage(cgImage: cgImage)
         guard let data = uiImage.jpegData(compressionQuality: MagnifierConfig.jpegQuality) else { return nil }
-        let url = FileStore.makeURL(ext: "jpg")
         do {
             try data.write(to: url, options: .atomic)
         } catch {
             logger.error("Could not write JPEG: \(error.localizedDescription, privacy: .public)")
             return nil
         }
-        return (uiImage, data, url)
-    }
-
-    private func saveFrozenPhoto(data: Data) async {
-        let state = await saveState {
-            try await PhotoLibrarySaver.saveImageData(data)
-        }
-        await MainActor.run {
-            guard var photo = self.frozenPhoto else { return }
-            photo.saveState = state
-            self.frozenPhoto = photo
-        }
-    }
-
-    private func saveRecordedVideo(at url: URL) async {
-        let state = await saveState {
-            try await PhotoLibrarySaver.saveVideo(at: url)
-        }
-        await MainActor.run {
-            guard self.recordedClip?.url == url, var clip = self.recordedClip else {
-                FileStore.remove(url)
-                return
-            }
-            clip.saveState = state
-            self.recordedClip = clip
-        }
-    }
-
-    private func saveState(_ operation: () async throws -> Void) async -> SaveState {
-        do {
-            try await operation()
-            return .saved
-        } catch let error as SaveError where error == .denied {
-            return .denied
-        } catch {
-            logger.error("Photo library save failed: \(error.localizedDescription, privacy: .public)")
-            return .failed
-        }
+        return uiImage
     }
 
     private func thumbnail(for url: URL) -> UIImage? {
@@ -818,14 +983,14 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         bufferLock.lock()
         let accept = acceptingFrames
-        if accept {
-            latestPixelBuffer = buffer
-        }
+        let generation = frameGeneration
+        let reportReady = accept && !didReportFirstFrame
+        if accept { latestPixelBuffer = buffer }
+        if reportReady { didReportFirstFrame = true }
         bufferLock.unlock()
-        guard accept else { return }
+        guard reportReady else { return }
         Task { @MainActor in
-            if !self.isReady {
-                self.isReady = true
+            if self.capture.firstFrame(for: generation) {
                 self.problem = nil
                 self.readyTimeoutToken += 1
             }
@@ -839,9 +1004,16 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
         didStartRecordingTo fileURL: URL,
         from connections: [AVCaptureConnection]
     ) {
-        Task { @MainActor in
-            self.isRecording = true
-            self.recordingStartedAt = Date()
+        sessionQueue.async { [weak self] in
+            guard let self, self.recordingURL == fileURL else { return }
+            if self.recordingStopRequested || !self.wantsRunning { self.movieOutput.stopRecording() }
+            Task { @MainActor in
+                guard let record = self.activeRecording, self.media.url(for: record) == fileURL else { return }
+                self.recordingStartedAt = Date()
+                if self.capture.recordingDidStart() {
+                    self.sessionQueue.async { [weak self] in self?.requestRecordingStop() }
+                }
+            }
         }
     }
 
@@ -852,40 +1024,52 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
         error: Error?
     ) {
         let nsError = error as NSError?
-        let finishedFlag = nsError?.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool
-        let usable = error == nil || finishedFlag == true
+        let usable = error == nil || nsError?.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool == true
         sessionQueue.async { [weak self] in
-            guard let self else { return }
-            let shouldStop = !self.wantsRunning
-            if shouldStop, self.session.isRunning {
+            guard let self, self.recordingURL == outputFileURL else { return }
+            self.recordingURL = nil
+            self.recordingStopRequested = false
+            if !self.wantsRunning, self.session.isRunning {
                 self.setAcceptingFrames(false)
                 self.session.stopRunning()
             }
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self else { return }
-                let preview = usable ? self.thumbnail(for: outputFileURL) : nil
-                let bytes = (try? FileManager.default.attributesOfItem(atPath: outputFileURL.path))?[.size] as? NSNumber
-                Task { @MainActor in
-                    let duration = self.recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
-                    self.isRecording = false
-                    self.recordingStartedAt = nil
-                    guard usable, (bytes?.intValue ?? 0) > 0 else {
-                        FileStore.remove(outputFileURL)
-                        self.alert = AppAlert(title: L10n.recordFailedTitle, message: L10n.recordFailedBody)
-                        return
-                    }
-                    if let previous = self.recordedClip, previous.url != outputFileURL, previous.saveState != .saving {
-                        FileStore.remove(previous.url)
-                    }
-                    self.recordedClip = RecordedClip(
-                        url: outputFileURL,
-                        thumbnail: preview,
-                        duration: duration,
-                        saveState: .saving
-                    )
-                    await self.saveRecordedVideo(at: outputFileURL)
-                }
+            if let (generation, zoom, torch) = self.pendingRebuild {
+                self.pendingRebuild = nil
+                self.rebuild(generation: generation, zoom: zoom, torch: torch)
+            }
+            Task {
+                let asset = AVURLAsset(url: outputFileURL)
+                let duration = (try? await asset.load(.duration))?.seconds ?? 0
+                let playable = (try? await asset.load(.isPlayable)) ?? false
+                let bytes = (try? outputFileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                let valid = usable && playable && duration.isFinite && duration > 0 && bytes > 0
+                let preview = valid ? self.thumbnail(for: outputFileURL) : nil
+                await self.finishRecording(at: outputFileURL, valid: valid, duration: duration, preview: preview)
             }
         }
     }
+
+    @MainActor private func finishRecording(at url: URL, valid: Bool, duration: TimeInterval, preview: UIImage?) async {
+        guard let record = activeRecording, media.url(for: record) == url else { return }
+        activeRecording = nil
+        capture.finish()
+        recordingStartedAt = nil
+        media.finish(record.id, complete: valid, duration: valid ? duration : nil)
+        guard valid else {
+            alert = AppAlert(title: L10n.recordFailedTitle, message: L10n.recordFailedBody)
+            return // Retain questionable output for recovery or explicit discard.
+        }
+        recordedClip = RecordedClip(id: record.id, url: url, thumbnail: preview, duration: duration)
+        await media.save(record.id)
+    }
+}
+
+/// Removing block observers also releases NotificationCenter's retained closures.
+private final class NotificationBag {
+    var tokens: [NSObjectProtocol] = []
+    func clear() {
+        tokens.forEach { NotificationCenter.default.removeObserver($0) }
+        tokens = []
+    }
+    deinit { clear() }
 }

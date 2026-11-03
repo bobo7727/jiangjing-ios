@@ -75,6 +75,12 @@
 			isa = PBXBuildFile;
 			fileRef = BE5A879A48AD150D4131FE70 /* PrivacyInfo.xcprivacy */;
 		};
+		FD2075293E813BC71BC85562 /* CaptureState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32710B35211F2763C4501EFE; };
+		B6A8896301E069F88A232470 /* MediaJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7898C2E46F3FC8EFDD62BD0B; };
+		9B61AB862C371A59A8ED52A3 /* MediaLibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04DF1467455958B71B3E4846; };
+		EAF5DC14CE648CCC715119DA /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63F3FC6BAA5062DA691B05D4; };
+		176EC1CB4A55F21FA86E6BB6 /* PrivacyPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EB2A3A3DCF1CB79423F0D3A; };
+		B2FFE7492719201A07C737B1 = {isa = PBXBuildFile; fileRef = BA76EDB0E46A62EEAAC441E7; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -209,6 +215,13 @@
 			path = JiangJing.app;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
+		32710B35211F2763C4501EFE /* CaptureState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureState.swift; sourceTree = "<group>"; };
+		7898C2E46F3FC8EFDD62BD0B /* MediaJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaJournal.swift; sourceTree = "<group>"; };
+		04DF1467455958B71B3E4846 /* MediaLibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryModel.swift; sourceTree = "<group>"; };
+		63F3FC6BAA5062DA691B05D4 /* MediaLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryView.swift; sourceTree = "<group>"; };
+		8EB2A3A3DCF1CB79423F0D3A /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyView.swift; sourceTree = "<group>"; };
+		BA76EDB0E46A62EEAAC441E7 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryModelTests.swift; sourceTree = "<group>"; };
+		1E843FA11555A8E9CF812052 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JiangJingTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -219,6 +232,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FA14C8F629E0785D6C223BA0 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -233,6 +247,7 @@
 		177B17E86105ED5A2BE03F26 /* Camera */ = {
 			isa = PBXGroup;
 			children = (
+				32710B35211F2763C4501EFE /* CaptureState.swift */,
 				5D3A2D3606ED1B20A0B7D547 /* CameraController.swift */,
 				890CEA106AE2461340A04F9F /* CameraPreviewView.swift */,
 				9E8A8EF43E3A50A58B89D49E /* PortraitRotation.swift */,
@@ -243,6 +258,8 @@
 		FD78A146B6954A07BB883801 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				8EB2A3A3DCF1CB79423F0D3A /* PrivacyPolicyView.swift */,
+				63F3FC6BAA5062DA691B05D4 /* MediaLibraryView.swift */,
 				3F3DD9A6D9F2BCAF3B7C1C98 /* CaptureBanner.swift */,
 				05B16EA31488A35DD537CAA9 /* ControlBar.swift */,
 				4ECC15DFDB059B66D369FB84 /* MagnifierScreen.swift */,
@@ -254,6 +271,8 @@
 		1F80A6CB8258121537D4EBAB /* Media */ = {
 			isa = PBXGroup;
 			children = (
+				04DF1467455958B71B3E4846 /* MediaLibraryModel.swift */,
+				7898C2E46F3FC8EFDD62BD0B /* MediaJournal.swift */,
 				BC19698185649DA148087A0F /* PhotoLibrarySaver.swift */,
 			);
 			path = Media;
@@ -298,6 +317,7 @@
 		85D4C35508CD5A864C9BAA39 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				1E843FA11555A8E9CF812052,
 				1BF8D831554D2CD43F496251 /* JiangJing.app */,
 			);
 			name = Products;
@@ -313,14 +333,22 @@
 		CECA40B50B3E070B65D94A5D = {
 			isa = PBXGroup;
 			children = (
+				7EAC671F316862D2C71DCBA1,
 				32AF0F8DF371D868BAEA4771 /* JiangJing */,
 				85D4C35508CD5A864C9BAA39 /* Products */,
 				8AA68A6BBCC22783CD0FC73A /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
+		7EAC671F316862D2C71DCBA1 = {isa = PBXGroup; children = (BA76EDB0E46A62EEAAC441E7,); path = JiangJingTests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
+/* Begin PBXContainerItemProxy section */
+        28A5AC5C44FE8D748E89799D = {isa = PBXContainerItemProxy; containerPortal = F27E381E6E11CDA176B7E175; proxyType = 1; remoteGlobalIDString = D346EA25429AF1F199D878C4; remoteInfo = JiangJing; };
+/* End PBXContainerItemProxy section */
+/* Begin PBXTargetDependency section */
+        609C733C5FCBAB7FAB689E5A = {isa = PBXTargetDependency; target = D346EA25429AF1F199D878C4; targetProxy = 28A5AC5C44FE8D748E89799D; };
+/* End PBXTargetDependency section */
 /* Begin PBXNativeTarget section */
 		D346EA25429AF1F199D878C4 /* JiangJing */ = {
 			isa = PBXNativeTarget;
@@ -339,6 +367,17 @@
 			productReference = 1BF8D831554D2CD43F496251 /* JiangJing.app */;
 			productType = "com.apple.product-type.application";
 		};
+		DD421B9A0021101D70B0D49D /* JiangJingTests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = 75CBBF3AE6A93A2DBAFF2B62;
+            buildPhases = (23D07F87414AE765699DFA62, FA14C8F629E0785D6C223BA0, 8B65AF475D4027CC51460C48,);
+            buildRules = ();
+            dependencies = (609C733C5FCBAB7FAB689E5A,);
+            name = JiangJingTests;
+            productName = JiangJingTests;
+            productReference = 1E843FA11555A8E9CF812052;
+            productType = "com.apple.product-type.bundle.unit-test";
+        };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -369,6 +408,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				DD421B9A0021101D70B0D49D /* JiangJingTests */,
 				D346EA25429AF1F199D878C4 /* JiangJing */,
 			);
 		};
@@ -386,6 +426,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8B65AF475D4027CC51460C48 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -393,6 +434,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				176EC1CB4A55F21FA86E6BB6 /* PrivacyPolicyView.swift in Sources */,
+				EAF5DC14CE648CCC715119DA /* MediaLibraryView.swift in Sources */,
+				9B61AB862C371A59A8ED52A3 /* MediaLibraryModel.swift in Sources */,
+				B6A8896301E069F88A232470 /* MediaJournal.swift in Sources */,
+				FD2075293E813BC71BC85562 /* CaptureState.swift in Sources */,
 				D979400AF31C00FE0ED2AEDA /* JiangJingApp.swift in Sources */,
 				E5B348E67664129058CD7585 /* CameraController.swift in Sources */,
 				82F826BDDE608959D6F09D86 /* CameraPreviewView.swift in Sources */,
@@ -409,6 +455,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		23D07F87414AE765699DFA62 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B2FFE7492719201A07C737B1,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXVariantGroup section */
@@ -466,6 +513,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SDKROOT = iphoneos;
 				VERSIONING_SYSTEM = "apple-generic";
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.0;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_TESTABILITY = YES;
@@ -515,6 +563,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				SDKROOT = iphoneos;
 				VERSIONING_SYSTEM = "apple-generic";
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.0;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -549,6 +598,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -578,11 +628,44 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
+        FF0D7A12DAD3D10EF7D14696 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                CODE_SIGN_STYLE = Automatic;
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                PRODUCT_BUNDLE_IDENTIFIER = com.jiangjing.magnifier.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = 1;
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JiangJing.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/JiangJing";
+            };
+            name = Debug;
+        };
+        DE2AE94C20D3046A3CE6ED7E = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                CODE_SIGN_STYLE = Automatic;
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                PRODUCT_BUNDLE_IDENTIFIER = com.jiangjing.magnifier.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = 1;
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JiangJing.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/JiangJing";
+            };
+            name = Release;
+        };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -604,6 +687,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		75CBBF3AE6A93A2DBAFF2B62 = {isa = XCConfigurationList; buildConfigurations = (FF0D7A12DAD3D10EF7D14696, DE2AE94C20D3046A3CE6ED7E,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = F27E381E6E11CDA176B7E175 /* Project object */;

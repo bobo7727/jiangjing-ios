@@ -11,6 +11,7 @@ options:
   groupSortPosition: top
 settings:
   base:
+    SWIFT_STRICT_CONCURRENCY: complete
     SWIFT_VERSION: "5.0"
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     TARGETED_DEVICE_FAMILY: "1"
@@ -51,5 +52,24 @@ targets:
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
-    scheme:
-      gatherCoverageData: false
+
+  JiangJingTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: JiangJingTests
+    dependencies:
+      - target: JiangJing
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.jiangjing.magnifier.tests
+schemes:
+  JiangJing:
+    build:
+      targets:
+        JiangJing: all
+        JiangJingTests: [test]
+    test:
+      targets: [JiangJingTests]

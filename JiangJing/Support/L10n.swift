@@ -61,4 +61,22 @@ enum L10n {
     static var a11yShare: String { String(localized: "a11y.share") }
     static var a11yContinue: String { String(localized: "a11y.continue") }
     static var a11yPresets: String { String(localized: "a11y.presets") }
+
+    static var mediaTitle: String { String(localized: "media.title") }
+    static var mediaPending: String { String(localized: "media.pending") }
+    static var mediaUncertain: String { String(localized: "media.uncertain") }
+    static var mediaRetention: String { String(localized: "media.retention") }
+    static var mediaIncomplete: String { String(localized: "media.incomplete") }
+    static var mediaRetry: String { String(localized: "media.retry") }
+    static var mediaVerify: String { String(localized: "media.verify") }
+    static var mediaDiscard: String { String(localized: "media.discard") }
+    static var mediaDiscardConfirm: String { String(localized: "media.discardConfirm") }
+    static var mediaDuplicateWarning: String { String(localized: "media.duplicateWarning") }
+    static var storageTitle: String { String(localized: "storage.title") }
+    static var storageBody: String { String(localized: "storage.body") }
+    static var shareFailedTitle: String { String(localized: "share.failed.title") }
+    static var shareFailedBody: String { String(localized: "share.failed.body") }
+    static var privacyTitle: String { String(localized: "privacy.title") }
+    static var privacyOnline: String { String(localized: "privacy.online") }
+    static var privacyBody: String { String(localized: "privacy.body") }
 }

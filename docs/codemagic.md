@@ -1,11 +1,13 @@
 # Codemagic → TestFlight
 
-仓库根目录的 `codemagic.yaml` 有两个**手动**工作流，没有 push 自动触发。Xcode 固定为 **26.6**，机器是 `mac_mini_m2`，和 stl2stp 相同。营销版本保持 `1.0.0`；构建号用 Codemagic 的 `PROJECT_BUILD_NUMBER`，不写死在仓库里。
+仓库根目录的 `codemagic.yaml` 有两个**手动**工作流，没有 push 自动触发。编译检查不得使用会上传的 `ios-testflight`。Xcode 固定为 **26.6**，机器是 `mac_mini_m2`，和 stl2stp 相同。营销版本保持 `1.0.0`；构建号用 Codemagic 的 `PROJECT_BUILD_NUMBER`，不写死在仓库里。
 
 | 工作流 | 名称 | 做什么 | 签名 |
 | --- | --- | --- | --- |
-| `ios-simulator` | iOS simulator - compile check | 用 XcodeGen 生成工程，编一个不签名的模拟器 `.app` 并打成 zip | 不需要 |
+| `ios-simulator` | iOS simulator - compile check | 运行纯逻辑与 iOS 集成测试，编译不签名 Debug 模拟器和 Release 设备目标，检查资源并保留日志 | 不需要 |
 | `ios-testflight` | iOS signed release - TestFlight | 签名 Release IPA，提交 TestFlight，不提交 App Store 审核 | 需要下面的 Apple 与 Codemagic 配置 |
+
+XcodeGen 固定为 2.44.1，由 `scripts/install-xcodegen.sh` 从官方 GitHub release 安装到 checkout 的 `build/tools`，使用发布附件的 SHA-256 校验。来源：[发布附件与摘要](https://github.com/yonaskolb/XcodeGen/releases/expanded_assets/2.44.1)。Xcode、Swift、XcodeGen 版本和提交号作为 artifacts 保留。
 
 Bundle ID 固定为 `com.jiangjing.magnifier`。Team ID 为 `G7LL8HDN83`。`Info.plist` 里 `ITSAppUsesNonExemptEncryption` 为 false。`JiangJing/PrivacyInfo.xcprivacy` 声明不追踪、不收集数据。共享 scheme 在 `JiangJing.xcodeproj/xcshareddata/xcschemes/JiangJing.xcscheme`。
 
@@ -17,7 +19,7 @@ Codemagic 应连接 GitHub 仓库 [bobo7727/jiangjing-ios](https://github.com/bo
 
 密钥和 API 私钥只放在 Codemagic，不写进 YAML，不提交 Git。
 
-先手动启动 `ios-simulator`。zip 只说明能编译，不能装到 iPhone。通过后再启动 `ios-testflight`。
+先手动启动 `ios-simulator`。必须检查测试结果及完整并发诊断；不可将未解释的并发告警视为验收通过。zip 不能装到 iPhone，当前可用模拟器 runtime 的测试也不代表已运行 iOS 16。真机验收通过并补齐发布条件后，再单独启动 `ios-testflight`。
 
 ## 2. 在 Apple 侧登记应用
 
@@ -49,10 +51,14 @@ stl2stp-app-store-connect
 | 变量 | 值 |
 | --- | --- |
 | `APP_STORE_APPLE_ID` | 第 2 步记下的数字 Apple ID |
+| `PRIVACY_POLICY_URL_ZH` | 已公开可访问的中文 HTTPS 隐私政策网址 |
+| `PRIVACY_POLICY_URL_EN` | 已公开可访问的英文 HTTPS 隐私政策网址 |
 
-`ios-testflight` 已经引用这个组。缺变量或不是纯数字时，工作流会在签名之前失败。
+`ios-testflight` 已经引用这个组。缺变量、Apple ID 不是纯数字，或政策网页无法公开访问时，工作流会在签名之前失败。`APP_STORE_APPLE_ID` 只校验格式，实际上传目标仍由 IPA 的 Bundle ID 和认证团队决定，必须在 App Store Connect 人工核对应用记录。
 
-选含 `codemagic.yaml` 的最新提交，手动启动 **`ios-testflight`**。它会安装 XcodeGen、按 `project.yml` 生成工程、执行 `xcode-project use-profiles`、用 `agvtool new-version -all` 写入 `PROJECT_BUILD_NUMBER`，再打 IPA 并提交 TestFlight。`submit_to_app_store` 为 false，不会送审上架。
+`docs/privacy/zh.html` 和 `en.html` 是与应用内文案一致的待发布页面。发布者需核对主体及联系方式、实际行为后发布，并将网址填入变量组及 App Store Connect；本次没有托管、发布或验证真实网址。校验脚本只检查 HTTPS 响应及页面标识，不认证政策完整性。真实政策是分发门槛。
+
+选含 `codemagic.yaml` 的最新提交，手动启动 **`ios-testflight`**。它会先校验公开政策网址并写入本次构建的 Info.plist，再安装固定版本 XcodeGen、按 `project.yml` 生成工程、执行 `xcode-project use-profiles`、用 `agvtool new-version -all` 写入 `PROJECT_BUILD_NUMBER`，再打 IPA 并提交 TestFlight。`submit_to_app_store` 为 false，不会送审上架。
 
 上传成功只表示文件到了 App Store Connect。还要等 Apple 处理完，并在 TestFlight 里加测试员。正式上架不在这条工作流里。
 
@@ -61,6 +67,7 @@ stl2stp-app-store-connect
 - 模拟器工作流失败：看 Xcode 编译日志，先确认 Xcode 是 26.6、scheme 名是 `JiangJing`。
 - 签名失败：核对 Bundle ID、Team `G7LL8HDN83`、集成名 `stl2stp-app-store-connect`，以及 App Store profile 是否覆盖 `com.jiangjing.magnifier`。
 - `APP_STORE_APPLE_ID` 报错：变量组名必须是 `jiangjing_release`，值只能是数字。
+- 政策校验报错：提供真实公开 HTTPS 页面；不要用示例网址或需要登录的页面。
 - `agvtool` 报项目没有版本管理：`project.yml` 里已设 `VERSIONING_SYSTEM: apple-generic`。确认生成步骤在 `agvtool` 之前。
 - TestFlight 处理失败：回到第 3 步把测试信息和出口合规填完，然后等 Apple 重试，不必为了这个改代码。
 
@@ -71,3 +78,9 @@ stl2stp-app-store-connect
 ## 内测分发说明
 
 `codemagic.yaml` 里设为 `submit_to_testflight: false`：Codemagic 只上传到 App Store Connect，不提交外部 Beta 审核（stl2stp 曾因该接口返回 HTTP 422 导致构建被标记失败）。每个新 build 处理完成后（十几分钟到半小时），需要在 App Store Connect 的 TestFlight → Internal Testing 组里手动添加该 build。
+
+## 发布前的独立检查
+
+核对签名证书私钥、profile 的 Bundle ID/团队/有效期、ASC 集成权限、应用记录和递增构建号；本地静态检查无法替代这些验证。
+发布工作流保留 `build/ios/archive/*.xcarchive`（含 dSYM）、IPA、archive 日志和工具版本。上传后还需等待 Apple 处理并在内部测试设备安装，完成采集、保存、音轨和分享冒烟测试。
+`submit_to_testflight: false` 仍会上传 ASC，只关闭自动 Beta 审核提交，见 [Codemagic 发布说明](https://docs.codemagic.io/yaml-publishing/app-store-connect/)。

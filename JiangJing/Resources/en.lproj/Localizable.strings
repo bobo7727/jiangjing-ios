@@ -59,3 +59,22 @@
 "a11y.share" = "Share";
 "a11y.continue" = "Return to the live view";
 "a11y.presets" = "Quick magnification";
+
+/* Retained media and privacy */
+"media.title" = "On-device media";
+"media.pending" = "Kept on this device. Save to Photos when the app is active.";
+"media.uncertain" = "The last save result is unknown. Check Photos first.";
+"media.retention" = "Closing a photo or video hides it. Local copies remain until you discard them or uninstall the app. Failed saves are retained. Save or share your media, then discard local copies you no longer need.";
+"media.incomplete" = "Capture is incomplete or the file needs verification. You can verify again; an unfinished movie may not be recoverable.";
+"media.retry" = "Retry Save";
+"media.verify" = "Verify File";
+"media.discard" = "Discard Local Copy";
+"media.discardConfirm" = "Discard this local copy? Unsaved media cannot be recovered. Copies already in Photos will remain.";
+"media.duplicateWarning" = "The previous save may have succeeded. Saving again may create a duplicate in Photos. Continue?";
+"storage.title" = "Local Storage Failed";
+"storage.body" = "Media or its recovery record could not be written. Check free space, save or share retained media, then try again. Unsaved copies are never automatically deleted.";
+"share.failed.title" = "Cannot Share Yet";
+"share.failed.body" = "Close the current dialog and try again. The file is retained in On-device Media.";
+"privacy.title" = "Privacy Policy";
+"privacy.online" = "View Online Policy";
+"privacy.body" = "JiangJing Privacy Policy\nUpdated November 3, 2026\n\nCamera and microphone: The camera provides magnification, photos, and video on your device. The microphone is used only when you enable sound. New recordings have no audio track when sound is off.\n\nPhotos: We request add-only access to save media you capture. The app does not read your photo library.\n\nOn-device media: Capture files and save status remain in private app storage so you can retry after failures, denied access, or interruptions. Closing a result does not delete the file. On-device Media lets you share, retry saving, or explicitly discard copies. Copies remain until discarded or the app is uninstalled. Copies already saved to Photos or shared elsewhere are managed by those apps. Unfinalized movies may not be recoverable.\n\nSharing: Only when you use the system share sheet is the selected media handed to the app or service you choose. Its subsequent handling is governed by that service’s policy.\n\nThe app requires no account, includes no advertising, tracking, or analytics SDKs, and does not upload photos, video, audio, or usage records to the developer. Photos, iCloud, and sharing services may sync according to system and service settings. You can change camera, microphone, and Photos permissions in Settings.";

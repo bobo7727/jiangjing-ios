@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct ControlBar: View {
     @ObservedObject var model: CameraController
     @State private var sliderValue = 0.0
@@ -124,7 +125,7 @@ struct ControlBar: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(!model.isReady || model.isRecording || model.isCapturingPhoto)
+        .disabled(!model.isReady || model.isRecording || model.isCapturingPhoto || model.isConfiguringAudio)
         .accessibilityLabel(L10n.a11yPhoto)
     }
 
@@ -139,7 +140,7 @@ struct ControlBar: View {
             Haptics.tap()
             model.toggleRecording()
         }
-        .disabled(!model.canRecord || !model.isReady || model.isConfiguringAudio)
+        .disabled(!model.isRecording && (!model.canRecord || !model.isReady || model.isConfiguringAudio || model.isCapturingPhoto))
         .accessibilityLabel(model.isRecording ? L10n.a11yStop : L10n.a11yRecord)
     }
 
@@ -176,7 +177,7 @@ struct ToolButton: View {
                 Text(title)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.white)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(minWidth: 76)
             .opacity(enabled ? 1 : 0.4)

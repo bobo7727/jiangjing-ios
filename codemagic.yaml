@@ -1,50 +1,71 @@
-# 手动启动。步骤见 docs/codemagic.md。
-# 没有 triggering，push 不会自动开跑。先跑 ios-simulator 做编译检查，再跑 ios-testflight。
+# 两个手动工作流。编译验证只使用 ios-simulator；ios-testflight 会上传。
 workflows:
   ios-simulator:
-    name: iOS simulator - compile check
+    name: iOS compile and regression checks - no publishing
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
       xcode: "26.6"
     scripts:
-      - name: Install XcodeGen and record the toolchain
+      - name: Install pinned XcodeGen and record the toolchain
         script: |
           #!/usr/bin/env bash
           set -euo pipefail
-          git log -1 --format="Build commit: %H %s"
-          xcodebuild -version
-          HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
-          xcodegen --version
-          xcodegen generate
+          mkdir -p build
+          git log -1 --format="Build commit: %H %s" | tee build/commit.txt
+          xcodebuild -version | tee build/xcode-version.txt
+          swift --version | tee build/swift-version.txt
+          source scripts/install-xcodegen.sh
+          "$XCODEGEN_BIN" generate
           test -f JiangJing.xcodeproj/xcshareddata/xcschemes/JiangJing.xcscheme
-      - name: Build the unsigned simulator app
+      - name: Regression tests
         script: |
           #!/usr/bin/env bash
           set -euo pipefail
-          xcodebuild \
-            -project JiangJing.xcodeproj \
-            -scheme JiangJing \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$CM_BUILD_DIR/build/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            build
+          python3 scripts/check-repository.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Tests -p 'test_*.py' -v
+          swift test -Xswiftc -strict-concurrency=complete 2>&1 | tee build/core-tests.log
+          SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          choices = [d["udid"] for runtime, entries in devices.items() if "iOS" in runtime
+                     for d in entries if d.get("isAvailable") and "iPhone" in d["name"]]
+          assert choices, "No available iPhone Simulator runtime"
+          print(choices[0])')
+          xcodebuild test -project JiangJing.xcodeproj -scheme JiangJing \
+            -destination "id=$SIMULATOR_ID" -resultBundlePath build/Regression.xcresult \
+            -derivedDataPath build/TestDerivedData CODE_SIGNING_ALLOWED=NO \
+            SWIFT_STRICT_CONCURRENCY=complete 2>&1 | tee build/ios-tests.log
+      - name: Build the unsigned Debug simulator app
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          xcodebuild -project JiangJing.xcodeproj -scheme JiangJing \
+            -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            SWIFT_STRICT_CONCURRENCY=complete build 2>&1 | tee build/simulator-build.log
           APP_PATH="$CM_BUILD_DIR/build/DerivedData/Build/Products/Debug-iphonesimulator/JiangJing.app"
-          test -d "$APP_PATH"
-          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")
-          test "$BUNDLE_ID" = "com.jiangjing.magnifier"
-          mkdir -p "$CM_BUILD_DIR/build"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" \
-            "$CM_BUILD_DIR/build/JiangJing-ios-simulator.zip"
+          python3 scripts/verify-app.py "$APP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" build/JiangJing-ios-simulator.zip
+      - name: Build the unsigned Release device app
+        script: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          xcodebuild -project JiangJing.xcodeproj -scheme JiangJing \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ReleaseDerivedData CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            SWIFT_STRICT_CONCURRENCY=complete build 2>&1 | tee build/release-build.log
+          python3 scripts/verify-app.py build/ReleaseDerivedData/Build/Products/Release-iphoneos/JiangJing.app
     artifacts:
       - build/JiangJing-ios-simulator.zip
+      - build/*.log
+      - build/*.txt
+      - build/tools/**/version.txt
+      - build/Regression.xcresult
       - /tmp/xcodebuild_logs/*.log
 
   ios-testflight:
-    name: iOS signed release - TestFlight
+    name: iOS signed release - upload to App Store Connect
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
@@ -61,36 +82,41 @@ workflows:
         script: |
           #!/usr/bin/env bash
           set -euo pipefail
-          : "${APP_STORE_APPLE_ID:?Set the numeric Apple ID in the jiangjing_release variable group}"
+          : "${APP_STORE_APPLE_ID:?Set the numeric Apple ID in jiangjing_release}"
           [[ "$APP_STORE_APPLE_ID" =~ ^[0-9]+$ ]] || { echo 'APP_STORE_APPLE_ID must be numeric' >&2; exit 1; }
           : "${PROJECT_BUILD_NUMBER:?Codemagic must provide PROJECT_BUILD_NUMBER}"
-          [[ "$PROJECT_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'PROJECT_BUILD_NUMBER must be a positive integer' >&2; exit 1; }
-          git log -1 --format="Build commit: %H %s"
-          xcodebuild -version
-          HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
-          xcodegen generate
+          [[ "$PROJECT_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'PROJECT_BUILD_NUMBER must be positive' >&2; exit 1; }
+          python3 scripts/check-release-policy.py
+          mkdir -p build
+          git log -1 --format="Build commit: %H %s" | tee build/commit.txt
+          xcodebuild -version | tee build/xcode-version.txt
+          swift --version | tee build/swift-version.txt
+          source scripts/install-xcodegen.sh
+          "$XCODEGEN_BIN" generate
           test -f JiangJing.xcodeproj/xcshareddata/xcschemes/JiangJing.xcscheme
-          grep -q 'com.jiangjing.magnifier' JiangJing.xcodeproj/project.pbxproj
       - name: Apply signing profiles and build number
         script: |
           #!/usr/bin/env bash
           set -euo pipefail
           xcode-project use-profiles
-          echo "Building IPA with Codemagic project build number: $PROJECT_BUILD_NUMBER"
           xcrun agvtool new-version -all "$PROJECT_BUILD_NUMBER"
       - name: Archive the signed IPA
         script: |
           #!/usr/bin/env bash
           set -euo pipefail
-          xcode-project build-ipa \
-            --project JiangJing.xcodeproj \
-            --scheme JiangJing \
-            --export-options-plist=/Users/builder/export_options.plist
+          xcode-project build-ipa --project JiangJing.xcodeproj --scheme JiangJing \
+            --archive-directory build/ios/archive \
+            --export-options-plist=/Users/builder/export_options.plist 2>&1 | tee build/archive.log
     artifacts:
       - build/ios/ipa/*.ipa
+      - build/archive.log
+      - build/ios/archive/*.xcarchive
+      - build/ios/**/*.dSYM
+      - build/*.txt
+      - build/tools/**/version.txt
       - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: false  # 只做内测；提交外部 Beta 审核会返回 422 并让构建失败（stl2stp 踩过）
+        submit_to_testflight: false  # 仍上传 App Store Connect；不自动提交 Beta 审核
         submit_to_app_store: false

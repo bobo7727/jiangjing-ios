@@ -1,13 +1,15 @@
 import UIKit
 
-/// Presents the system share sheet from the active window so WeChat and other
-/// apps receive the file. A SwiftUI `.sheet` wrapping this controller nests two
-/// presentations and drops the file on some iOS versions.
+/// Presents the system share sheet from the active window. The completion
+/// releases the file lease after sharing or cancellation.
+@MainActor
 enum ShareCenter {
-    static func present(items: [Any]) {
-        guard !items.isEmpty, let presenter = topViewController() else { return }
-        guard presenter.presentedViewController == nil else { return }
+    static func present(items: [Any], completion: @escaping () -> Void) -> Bool {
+        guard !items.isEmpty, let presenter = topViewController() else { return false }
+        guard presenter.presentedViewController == nil else { return false }
+        guard !presenter.isBeingDismissed, !presenter.isBeingPresented else { return false }
         let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in completion() }
         if let popover = controller.popoverPresentationController {
             popover.sourceView = presenter.view
             let bounds = presenter.view.bounds
@@ -15,6 +17,7 @@ enum ShareCenter {
             popover.permittedArrowDirections = []
         }
         presenter.present(controller, animated: true)
+        return true
     }
 
     private static func topViewController() -> UIViewController? {

@@ -1,11 +1,14 @@
 import SwiftUI
 import UIKit
 
+@MainActor
 struct MagnifierScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
-    @StateObject private var model = CameraController()
+    @StateObject private var model = CameraController(library: MediaLibraryModel())
     @State private var showHint = true
+    @State private var showLibrary = false
+    @State private var showPrivacy = false
 
     var body: some View {
         ZStack {
@@ -16,12 +19,29 @@ struct MagnifierScreen: View {
                     allow: { model.requestCameraAccess() },
                     openSettings: openSettings
                 )
-            } else if let problem = model.problem {
+            } else if let problem = model.problem, !model.isRecording {
                 ProblemView(problem: problem, retry: { model.restart() })
             } else {
                 cameraStage
             }
         }
+        .overlay(alignment: .topLeading) {
+            HStack {
+                Button { showLibrary = true } label: {
+                    Label(L10n.mediaTitle, systemImage: "photo.on.rectangle")
+                }
+                Button { showPrivacy = true } label: {
+                    Label(L10n.privacyTitle, systemImage: "hand.raised")
+                }
+            }
+            .labelStyle(.iconOnly)
+            .font(.title2)
+            .padding(12)
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(.leading, 20)
+        }
+        .sheet(isPresented: $showLibrary) { MediaLibraryView(library: model.media) }
+        .sheet(isPresented: $showPrivacy) { PrivacyPolicyView() }
         .alert(
             model.alert?.title ?? "",
             isPresented: alertPresented,
@@ -32,6 +52,22 @@ struct MagnifierScreen: View {
                 Text(model.alert?.message ?? "")
             }
         )
+        .onReceive(model.media.$storageError) { failed in
+            if failed && !showLibrary {
+                model.alert = AppAlert(title: L10n.storageTitle, message: L10n.storageBody)
+                model.media.storageError = false
+            }
+        }
+        .onReceive(model.media.$shareError) { failed in
+            if failed && !showLibrary {
+                model.alert = AppAlert(title: L10n.shareFailedTitle, message: L10n.shareFailedBody)
+                model.media.shareError = false
+            }
+        }
+        .onChange(of: model.media.records) { records in
+            if let photo = model.frozenPhoto, !records.contains(where: { $0.id == photo.id }) { model.dismissFreeze() }
+            if let clip = model.recordedClip, !records.contains(where: { $0.id == clip.id }) { model.dismissClip() }
+        }
         .onAppear {
             model.onForeground()
             scheduleHintDismissal()
@@ -42,8 +78,10 @@ struct MagnifierScreen: View {
                 model.onForeground()
             case .background:
                 model.onBackground()
-            default:
-                break
+            case .inactive:
+                model.onInactive()
+            @unknown default:
+                model.onInactive()
             }
         }
     }
@@ -129,38 +167,49 @@ struct MagnifierScreen: View {
                         .transition(.opacity)
                 }
                 Spacer()
-                if model.frozenPhoto == nil, let clip = model.recordedClip {
-                    ClipBanner(
-                        clip: clip,
-                        onShare: { ShareCenter.present(items: [clip.url]) },
-                        onClose: { model.dismissClip() },
-                        onSettings: openSettings
-                    )
-                }
-                if let photo = model.frozenPhoto {
-                    FreezeOverlay(
-                        photo: photo,
-                        onShare: { ShareCenter.present(items: [photo.fileURL]) },
-                        onContinue: { model.dismissFreeze() },
-                        onSettings: openSettings
-                    )
-                } else {
-                    ControlBar(model: model)
+                ViewThatFits(in: .vertical) {
+                    captureControls.fixedSize(horizontal: false, vertical: true)
+                    ScrollView { captureControls }
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 8)
+            .padding(.top, 64)
             .padding(.bottom, 8)
 
-            if !model.isReady {
+            if !model.isReady && !model.isRecording {
                 startingOverlay
                     .ignoresSafeArea()
             }
         }
     }
 
+    private var captureControls: some View {
+        VStack(spacing: 12) {
+            if model.frozenPhoto == nil, let clip = model.recordedClip {
+                ClipBanner(
+                    clip: clip,
+                    library: model.media,
+                    onShare: { model.media.share(clip.id) },
+                    onClose: { model.dismissClip() },
+                    onSettings: openSettings
+                )
+            }
+            if let photo = model.frozenPhoto {
+                FreezeOverlay(
+                    photo: photo,
+                    library: model.media,
+                    onShare: { model.media.share(photo.id) },
+                    onContinue: { model.dismissFreeze() },
+                    onSettings: openSettings
+                )
+            } else {
+                ControlBar(model: model)
+            }
+        }
+    }
+
     private var topBar: some View {
-        ZStack {
+        VStack(spacing: 8) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(ZoomScale.format(model.zoomFactor))
