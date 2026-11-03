@@ -19,7 +19,7 @@ Codemagic 应连接 GitHub 仓库 [bobo7727/jiangjing-ios](https://github.com/bo
 
 密钥和 API 私钥只放在 Codemagic，不写进 YAML，不提交 Git。
 
-先手动启动 `ios-simulator`。必须检查测试结果及完整并发诊断；不可将未解释的并发告警视为验收通过。zip 不能装到 iPhone，当前可用模拟器 runtime 的测试也不代表已运行 iOS 16。真机验收通过并补齐发布条件后，再单独启动 `ios-testflight`。
+先按下面的通知设置创建 `grokbot_notify` 组，再手动启动 `ios-simulator`。必须检查测试结果及完整并发诊断；不可将未解释的并发告警视为验收通过。zip 不能装到 iPhone，当前可用模拟器 runtime 的测试也不代表已运行 iOS 16。真机验收通过并补齐发布条件后，再单独启动 `ios-testflight`。
 
 ## 2. 在 Apple 侧登记应用
 
@@ -74,6 +74,42 @@ stl2stp-app-store-connect
 参考：[App Store Connect 发布](https://docs.codemagic.io/yaml-publishing/app-store-connect/)、[YAML 基础配置](https://docs.codemagic.io/yaml-basic-configuration/yaml-getting-started/)。
 
 这份配置要在 Codemagic 的 Mac 上跑过才能确认签名和 TestFlight。这里没有 Xcode，不能代替那一步。
+
+## Grok Bot 构建完成通知
+
+**启用本 YAML 的任何工作流之前**，bobo 需在 Codemagic → Team settings → Global variables and secrets 创建 **`grokbot_notify`**，授权此 App 使用，并添加以下两个变量，两项都勾选 **Secret**：
+
+| 变量 | 内容 |
+| --- | --- |
+| `GROKBOT_WEBHOOK_URL` | Grok Bot routine 的完整 HTTPS webhook URL，不带用户信息或 fragment |
+| `GROKBOT_WEBHOOK_KEY` | webhook 的 Bearer key |
+
+两个工作流都引用该组；只有 TestFlight 继续引用已有的 `jiangjing_release`。组必须先创建：变量组由 Codemagic 在执行脚本前解析，不应依赖不存在的组被忽略；官方文档未承诺这种回退，脚本也不能捕获配置阶段错误。组已存在但任一通知变量未注入、为空（去除 CR/LF 后），或 URL 无效时，通知静默跳过。详见 [变量组与 Secret 配置](https://docs.codemagic.io/yaml-basic-configuration/configuring-environment-variables/)。
+
+实现使用共享的 `scripts/notify-grokbot.sh` 和每个工作流唯一的 `publishing.scripts`。Codemagic [post-publish 文档](https://docs.codemagic.io/yaml-distributing/post-publish/) 说明该脚本在构建失败后也会执行，但取消或超时会跳过，因此不会发送 `canceled`，也不能保证每次运行都有回调。模拟器仍不签名、不上传；它的 publishing 部分只发送通知。
+
+最后一个普通脚本尽力创建 `$HOME/codemagic-success-$CM_BUILD_ID`（build ID 必须非空），通知只检查当前 build 的标记。标记创建失败不改变构建结果；没有标记保守地视为未确认普通脚本成功。状态约定如下：
+
+| 工作流 | `status` | 含义 |
+| --- | --- | --- |
+| `ios-simulator` | `success` / `failed` | 当前 build 标记存在 / 不存在，仅表示普通脚本是否完成 |
+| `ios-testflight` | 固定 `finished` | 通知钩子已运行；**不表示上传成功或失败**。额外的 `script_marker: present/absent` 也只是普通脚本完成提示 |
+
+CI 不添加 Codemagic API token，也不查询 Codemagic API。接收端收到 TestFlight 通知后自行查询真实上传结果；钩子执行时最终状态也可能尚未就绪，需要由接收端处理。
+
+JSON 包含 `source: codemagic`、`app: jiangjing-ios`、`workflow`、`build_id`、`app_id`、`build_url`（`https://codemagic.io/app/<app_id>/build/<build_id>`）、`status`、`branch`、`commit`、`timestamp`（发送时的 UTC ISO-8601 时间），TestFlight 另有上述 `script_marker`。ID、分支和提交来自 [Codemagic 内置变量](https://docs.codemagic.io/yaml-basic-configuration/environment-variables/)；YAML 不使用仅 Workflow Editor 提供的 `CM_BUILD_STEP_STATUS`。
+
+请求使用 `Authorization: Bearer …` 和 `Content-Type: application/json`。脚本先关闭 tracing，清除 URL/key 中所有 CR/LF，用权限 600 的系统临时文件传给 curl 并清理，不输出 URL、key 或响应。curl 仅允许 HTTPS、不跟随重定向，连接限时 3 秒、单次请求 8 秒、最多重试 2 次，重试窗口 18 秒，进程总限时 30 秒；同一次通知复用完全相同的 JSON。行为依据 [curl 文档](https://curl.se/docs/manpage.html)。通知失败、缺工具或序列化异常都静默返回 0，外层另有 `|| true`，不改变原构建结果。接收端按 **build ID + workflow** 去重，因为重试可能重复投递。
+
+本地检查依赖固定的 `PyYAML==6.0.3`（[发行页](https://pypi.org/project/PyYAML/6.0.3/)），模拟器 CI 在检查前自动安装。运行：
+
+```bash
+python3 -m pip install -r scripts/requirements-checks.txt
+python3 scripts/check-repository.py
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Tests -p 'test_*.py'
+```
+
+测试用本地 curl 替身，不会触发真实 webhook。上线仍需在 Codemagic 分别验证成功构建、故意的普通脚本失败、空凭据和 webhook 不可达时的行为；TestFlight 的真实上传结果交由接收端验证。真实发布验证需另行授权。
 
 ## 内测分发说明
 

@@ -4,10 +4,33 @@ import json
 import pathlib
 import plistlib
 import re
+import shlex
 import subprocess
 import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def enables_shell_tracing(source):
+    """Reject xtrace flags, including combined short options and -o xtrace."""
+    lexer = shlex.shlex(source, posix=True, punctuation_chars=';&|()\n')
+    lexer.whitespace = ' \t\r'
+    lexer.whitespace_split = True
+    tokens = list(lexer)
+    for index, token in enumerate(tokens):
+        if token != 'set':
+            continue
+        remaining = iter(tokens[index + 1:])
+        for option in remaining:
+            if option == '--' or not option.startswith(('-', '+')):
+                break
+            if option.startswith('-') and 'x' in option[1:]:
+                return True
+            if option.endswith('o'):
+                setting = next(remaining, '')
+                if option.startswith('-') and setting == 'xtrace':
+                    return True
+    return False
 
 
 def openstep(text):
@@ -118,20 +141,43 @@ print('PASS: checked-in project object references, app/test source membership an
 
 for path in (ROOT / 'scripts').glob('*.sh'):
     subprocess.run(['bash', '-n', str(path)], check=True)
+notifier = ROOT / 'scripts/notify-grokbot.sh'
+assert notifier.is_file(), 'Grok Bot notifier missing'
+assert not enables_shell_tracing(notifier.read_text()), 'Notifier must never enable shell tracing'
+assert notifier.read_text().splitlines()[1] == 'set +x', 'Disable inherited tracing first'
 try:
     import yaml
 except ImportError:
-    print('SKIP: YAML parser unavailable (Codemagic itself validates workflow YAML)')
+    raise SystemExit('Install checker dependencies: python3 -m pip install -r scripts/requirements-checks.txt')
 else:
     config = yaml.safe_load((ROOT / 'codemagic.yaml').read_text())
     project_spec = yaml.safe_load((ROOT / 'project.yml').read_text())
     assert project_spec['targets']['JiangJing']['deploymentTarget'] == '16.0'
     assert 'JiangJingTests' in project_spec['targets']
     compile_workflow = config['workflows']['ios-simulator']
-    assert 'publishing' not in compile_workflow and 'integrations' not in compile_workflow
-    for workflow in config['workflows'].values():
+    assert 'integrations' not in compile_workflow
+    assert compile_workflow['environment'] == {'xcode': '26.6', 'groups': ['grokbot_notify']}
+    assert set(compile_workflow['publishing']) == {'scripts'}, 'Simulator allows only the notifier'
+    release_workflow = config['workflows']['ios-testflight']
+    assert release_workflow['environment']['groups'] == ['jiangjing_release', 'grokbot_notify']
+    assert release_workflow['integrations'] == {'app_store_connect': 'stl2stp-app-store-connect'}
+    assert release_workflow['environment']['ios_signing'] == {
+        'distribution_type': 'app_store', 'bundle_identifier': 'com.jiangjing.magnifier'}
+    assert set(release_workflow['publishing']) == {'app_store_connect', 'scripts'}
+    assert release_workflow['publishing']['app_store_connect'] == {
+        'auth': 'integration', 'submit_to_testflight': False, 'submit_to_app_store': False}
+    for workflow_id, workflow in config['workflows'].items():
         assert 'triggering' not in workflow
-        for step in workflow['scripts']:
+        assert workflow['environment']['xcode'] == '26.6'
+        publishing_scripts = workflow['publishing']['scripts']
+        assert isinstance(publishing_scripts, list) and len(publishing_scripts) == 1
+        assert publishing_scripts[0] == {
+            'name': 'Notify Grok Bot',
+            'script': f'bash scripts/notify-grokbot.sh {workflow_id} || true'}
+        marker_script = workflow['scripts'][-1]['script']
+        assert 'if [ -n "${CM_BUILD_ID:-}" ]; then' in marker_script
+        assert 'touch "$HOME/codemagic-success-$CM_BUILD_ID" 2>/dev/null || true' in marker_script
+        for step in workflow['scripts'] + publishing_scripts:
             subprocess.run(['bash', '-n'], input=step['script'], text=True, check=True)
-    print('PASS: project/workflow YAML parses, embedded shell syntax, compile workflow has no publishing')
+    print('PASS: YAML and embedded shell syntax; simulator only notifies; release settings preserved')
 print('PASS: shell script syntax')

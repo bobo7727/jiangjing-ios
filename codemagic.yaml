@@ -6,6 +6,9 @@ workflows:
     max_build_duration: 60
     environment:
       xcode: "26.6"
+      # Create this group in Codemagic before running either workflow.
+      groups:
+        - grokbot_notify
     scripts:
       - name: Install pinned XcodeGen and record the toolchain
         script: |
@@ -22,6 +25,7 @@ workflows:
         script: |
           #!/usr/bin/env bash
           set -euo pipefail
+          python3 -m pip install -r scripts/requirements-checks.txt
           python3 scripts/check-repository.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Tests -p 'test_*.py' -v
           swift test -Xswiftc -strict-concurrency=complete 2>&1 | tee build/core-tests.log
@@ -56,6 +60,11 @@ workflows:
             -derivedDataPath build/ReleaseDerivedData CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             SWIFT_STRICT_CONCURRENCY=complete build 2>&1 | tee build/release-build.log
           python3 scripts/verify-app.py build/ReleaseDerivedData/Build/Products/Release-iphoneos/JiangJing.app
+      - name: Mark ordinary scripts complete (best effort)
+        script: |
+          if [ -n "${CM_BUILD_ID:-}" ]; then
+            touch "$HOME/codemagic-success-$CM_BUILD_ID" 2>/dev/null || true
+          fi
     artifacts:
       - build/JiangJing-ios-simulator.zip
       - build/*.log
@@ -63,6 +72,10 @@ workflows:
       - build/tools/**/version.txt
       - build/Regression.xcresult
       - /tmp/xcodebuild_logs/*.log
+    publishing:
+      scripts:
+        - name: Notify Grok Bot
+          script: bash scripts/notify-grokbot.sh ios-simulator || true
 
   ios-testflight:
     name: iOS signed release - upload to App Store Connect
@@ -74,6 +87,7 @@ workflows:
       xcode: "26.6"
       groups:
         - jiangjing_release
+        - grokbot_notify
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.jiangjing.magnifier
@@ -107,6 +121,11 @@ workflows:
           xcode-project build-ipa --project JiangJing.xcodeproj --scheme JiangJing \
             --archive-directory build/ios/archive \
             --export-options-plist=/Users/builder/export_options.plist 2>&1 | tee build/archive.log
+      - name: Mark ordinary scripts complete (best effort)
+        script: |
+          if [ -n "${CM_BUILD_ID:-}" ]; then
+            touch "$HOME/codemagic-success-$CM_BUILD_ID" 2>/dev/null || true
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
       - build/archive.log
@@ -120,3 +139,6 @@ workflows:
         auth: integration
         submit_to_testflight: false  # 仍上传 App Store Connect；不自动提交 Beta 审核
         submit_to_app_store: false
+      scripts:
+        - name: Notify Grok Bot
+          script: bash scripts/notify-grokbot.sh ios-testflight || true
