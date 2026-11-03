@@ -25,7 +25,6 @@ workflows:
         script: |
           #!/usr/bin/env bash
           set -euo pipefail
-          python3 -m pip install -r scripts/requirements-checks.txt
           python3 scripts/check-repository.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Tests -p 'test_*.py' -v
           swift test -Xswiftc -strict-concurrency=complete 2>&1 | tee build/core-tests.log

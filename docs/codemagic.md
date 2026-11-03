@@ -86,7 +86,7 @@ stl2stp-app-store-connect
 
 两个工作流都引用该组；只有 TestFlight 继续引用已有的 `jiangjing_release`。组必须先创建：变量组由 Codemagic 在执行脚本前解析，不应依赖不存在的组被忽略；官方文档未承诺这种回退，脚本也不能捕获配置阶段错误。组已存在但任一通知变量未注入、为空（去除 CR/LF 后），或 URL 无效时，通知静默跳过。详见 [变量组与 Secret 配置](https://docs.codemagic.io/yaml-basic-configuration/configuring-environment-variables/)。
 
-实现使用共享的 `scripts/notify-grokbot.sh` 和每个工作流唯一的 `publishing.scripts`。Codemagic [post-publish 文档](https://docs.codemagic.io/yaml-distributing/post-publish/) 说明该脚本在构建失败后也会执行，但取消或超时会跳过，因此不会发送 `canceled`，也不能保证每次运行都有回调。模拟器仍不签名、不上传；它的 publishing 部分只发送通知。
+实现使用共享的 `scripts/notify-grokbot.sh` 和每个工作流唯一的 `publishing.scripts`。Codemagic [post-publish 文档](https://docs.codemagic.io/yaml-publishing/post-publish/) 说明该脚本在构建失败后也会执行，但取消或超时会跳过，因此不会发送 `canceled`，也不能保证每次运行都有回调。模拟器仍不签名、不上传；它的 publishing 部分只发送通知。
 
 最后一个普通脚本尽力创建 `$HOME/codemagic-success-$CM_BUILD_ID`（build ID 必须非空），通知只检查当前 build 的标记。标记创建失败不改变构建结果；没有标记保守地视为未确认普通脚本成功。状态约定如下：
 
@@ -101,15 +101,14 @@ JSON 包含 `source: codemagic`、`app: jiangjing-ios`、`workflow`、`build_id`
 
 请求使用 `Authorization: Bearer …` 和 `Content-Type: application/json`。脚本先关闭 tracing，清除 URL/key 中所有 CR/LF，用权限 600 的系统临时文件传给 curl 并清理，不输出 URL、key 或响应。curl 仅允许 HTTPS、不跟随重定向，连接限时 3 秒、单次请求 8 秒、最多重试 2 次，重试窗口 18 秒，进程总限时 30 秒；同一次通知复用完全相同的 JSON。行为依据 [curl 文档](https://curl.se/docs/manpage.html)。通知失败、缺工具或序列化异常都静默返回 0，外层另有 `|| true`，不改变原构建结果。接收端按 **build ID + workflow** 去重，因为重试可能重复投递。
 
-本地检查依赖固定的 `PyYAML==6.0.3`（[发行页](https://pypi.org/project/PyYAML/6.0.3/)），模拟器 CI 在检查前自动安装。运行：
+检查无需安装 Python 包，CI 不执行 pip 安装。`scripts/check-repository.py` 在已有 PyYAML 时运行 YAML 结构检查；未安装时只打印一行跳过提示，继续其余检查，退出状态不受跳过影响。依赖 PyYAML 的单元测试同样跳过。这样避免在通知密钥已注入时安装检查依赖，也避免系统解释器受 [PEP 668](https://peps.python.org/pep-0668/#marking-an-interpreter-as-using-an-external-package-manager) 管理时拒绝全局安装的兼容性风险；尚未确认 Codemagic 当前解释器是否带有该标记。运行：
 
 ```bash
-python3 -m pip install -r scripts/requirements-checks.txt
 python3 scripts/check-repository.py
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Tests -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Tests -p 'test_*.py' -v
 ```
 
-测试用本地 curl 替身，不会触发真实 webhook。上线仍需在 Codemagic 分别验证成功构建、故意的普通脚本失败、空凭据和 webhook 不可达时的行为；TestFlight 的真实上传结果交由接收端验证。真实发布验证需另行授权。
+测试用本地 curl 替身，不会触发真实 webhook；它验证完整参数和配置约定，并模拟可重试失败及 HTTPS/HTTP 重定向，不证明真实 curl 的重试或网络隔离。上线仍需在 Codemagic 分别验证成功构建、故意的普通脚本失败、空凭据和 webhook 不可达时的行为；TestFlight 的真实上传结果交由接收端验证。真实发布验证需另行授权。
 
 ## 内测分发说明
 

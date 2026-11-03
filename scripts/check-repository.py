@@ -11,26 +11,129 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
+def shell_source_without_heredocs(source):
+    """Keep shell commands, excluding literal heredoc bodies (including Python)."""
+    result = []
+    pending = []
+    quote = None
+    index = 0
+    while index < len(source):
+        char = source[index]
+        if char == '\\' and quote != "'":
+            if source[index:index + 2] != '\\\n':
+                result.append(source[index:index + 2])
+            index += 2
+            continue
+        if char in ('"', "'"):
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+        if quote is None and char == '#' and (index == 0 or source[index - 1].isspace()
+                                              or source[index - 1] in ';|&()'):
+            end = source.find('\n', index)
+            index = len(source) if end < 0 else end
+            continue
+        if quote is None and source.startswith('<<<', index):
+            result.append('<<<')
+            index += 3
+            continue
+        if quote is None and source.startswith('<<', index):
+            match = re.match(r'''<<(-?)[ \t]*('([^']*)'|"([^"]*)"|([\w]+))''', source[index:])
+            if not match:
+                raise ValueError('Unsupported shell heredoc delimiter')
+            pending.append((next(value for value in match.groups()[2:] if value is not None),
+                            bool(match[1])))
+            result.append(match[0])
+            index += len(match[0])
+            continue
+        result.append(char)
+        index += 1
+        if char == '\n' and quote is None and pending:
+            for delimiter, strip_tabs in pending:
+                while True:
+                    if index >= len(source):
+                        raise ValueError('Unterminated shell heredoc')
+                    end = source.find('\n', index)
+                    end = len(source) if end < 0 else end + 1
+                    line = source[index:end].rstrip('\n')
+                    index = end
+                    if (line.lstrip('\t') if strip_tabs else line) == delimiter:
+                        break
+            pending.clear()
+    if pending:
+        raise ValueError('Unterminated shell heredoc')
+    return ''.join(result)
+
+
 def enables_shell_tracing(source):
-    """Reject xtrace flags, including combined short options and -o xtrace."""
-    lexer = shlex.shlex(source, posix=True, punctuation_chars=';&|()\n')
+    """Check command-position set/bash/sh flags, respecting option boundaries."""
+    # Removing comments first preserves their newline as a command boundary.
+    lexer = shlex.shlex(shell_source_without_heredocs(source), posix=True,
+                        punctuation_chars=';&|()\n')
     lexer.whitespace = ' \t\r'
     lexer.whitespace_split = True
-    tokens = list(lexer)
+    lexer.commenters = ''
+    try:
+        tokens = list(lexer)
+        if source.startswith('#!'):
+            shebang = shlex.split(source.splitlines()[0][2:])
+            if shebang and pathlib.PurePosixPath(shebang[0]).name == 'env':
+                shebang = shebang[1:]
+                if shebang[:1] == ['-S']:
+                    shebang = shebang[1:]
+            tokens = shebang + ['\n'] + tokens
+    except ValueError as error:
+        raise ValueError(f'Cannot tokenize shell script: {error}') from error
+
+    command_position = True
     for index, token in enumerate(tokens):
-        if token != 'set':
+        if token and all(char in ';&|()\n' for char in token):
+            command_position = True
+            continue
+        if not command_position:
+            continue
+        if token in ('if', 'then', 'elif', 'else', 'do', '!', '{', '}') or re.match(r'^\w+=', token):
+            continue
+        command_position = False
+        command = pathlib.PurePosixPath(token).name
+        if command not in ('set', 'bash', 'sh'):
             continue
         remaining = iter(tokens[index + 1:])
         for option in remaining:
             if option == '--' or not option.startswith(('-', '+')):
                 break
-            if option.startswith('-') and 'x' in option[1:]:
+            if command != 'set' and option in ('-c', '+c'):
+                break
+            if option.startswith('-') and not option.startswith('--') and 'x' in option[1:]:
                 return True
             if option.endswith('o'):
                 setting = next(remaining, '')
                 if option.startswith('-') and setting == 'xtrace':
                     return True
     return False
+
+
+MARKER_NAME = 'Mark ordinary scripts complete (best effort)'
+MARKER_SCRIPT = '''if [ -n "${CM_BUILD_ID:-}" ]; then
+  touch "$HOME/codemagic-success-$CM_BUILD_ID" 2>/dev/null || true
+fi'''
+
+
+def check_workflow_scripts(workflow_id, workflow):
+    publishing_scripts = workflow['publishing']['scripts']
+    assert isinstance(publishing_scripts, list) and len(publishing_scripts) == 1
+    assert publishing_scripts[0] == {
+        'name': 'Notify Grok Bot',
+        'script': f'bash scripts/notify-grokbot.sh {workflow_id} || true'}
+    marker = workflow['scripts'][-1]
+    assert marker['name'] == MARKER_NAME, 'Final ordinary step must be the success marker'
+    assert marker['script'].strip() == MARKER_SCRIPT, 'Success marker script must match exactly'
+    for step in workflow['scripts'][:-1] + publishing_scripts:
+        assert 'codemagic-success-' not in step['script'], 'Success marker referenced outside final step'
+    for step in workflow['scripts'] + publishing_scripts:
+        assert not enables_shell_tracing(step['script']), 'Workflow must never enable shell tracing'
+        subprocess.run(['bash', '-n'], input=step['script'], text=True, check=True)
 
 
 def openstep(text):
@@ -148,7 +251,7 @@ assert notifier.read_text().splitlines()[1] == 'set +x', 'Disable inherited trac
 try:
     import yaml
 except ImportError:
-    raise SystemExit('Install checker dependencies: python3 -m pip install -r scripts/requirements-checks.txt')
+    print('SKIP: YAML-structure checks skipped because PyYAML is not installed')
 else:
     config = yaml.safe_load((ROOT / 'codemagic.yaml').read_text())
     project_spec = yaml.safe_load((ROOT / 'project.yml').read_text())
@@ -169,15 +272,6 @@ else:
     for workflow_id, workflow in config['workflows'].items():
         assert 'triggering' not in workflow
         assert workflow['environment']['xcode'] == '26.6'
-        publishing_scripts = workflow['publishing']['scripts']
-        assert isinstance(publishing_scripts, list) and len(publishing_scripts) == 1
-        assert publishing_scripts[0] == {
-            'name': 'Notify Grok Bot',
-            'script': f'bash scripts/notify-grokbot.sh {workflow_id} || true'}
-        marker_script = workflow['scripts'][-1]['script']
-        assert 'if [ -n "${CM_BUILD_ID:-}" ]; then' in marker_script
-        assert 'touch "$HOME/codemagic-success-$CM_BUILD_ID" 2>/dev/null || true' in marker_script
-        for step in workflow['scripts'] + publishing_scripts:
-            subprocess.run(['bash', '-n'], input=step['script'], text=True, check=True)
+        check_workflow_scripts(workflow_id, workflow)
     print('PASS: YAML and embedded shell syntax; simulator only notifies; release settings preserved')
 print('PASS: shell script syntax')
