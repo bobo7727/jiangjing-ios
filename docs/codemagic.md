@@ -101,12 +101,20 @@ JSON 包含 `source: codemagic`、`app: jiangjing-ios`、`workflow`、`build_id`
 
 请求使用 `Authorization: Bearer …` 和 `Content-Type: application/json`。脚本先关闭 tracing，清除 URL/key 中所有 CR/LF，用权限 600 的系统临时文件传给 curl 并清理，不输出 URL、key 或响应。curl 仅允许 HTTPS、不跟随重定向，连接限时 3 秒、单次请求 8 秒、最多重试 2 次，重试窗口 18 秒，进程总限时 30 秒；同一次通知复用完全相同的 JSON。行为依据 [curl 文档](https://curl.se/docs/manpage.html)。通知失败、缺工具或序列化异常都静默返回 0，外层另有 `|| true`，不改变原构建结果。接收端按 **build ID + workflow** 去重，因为重试可能重复投递。
 
-检查无需安装 Python 包，CI 不执行 pip 安装。`scripts/check-repository.py` 在已有 PyYAML 时运行 YAML 结构检查；未安装时只打印一行跳过提示，继续其余检查，退出状态不受跳过影响。依赖 PyYAML 的单元测试同样跳过。这样避免在通知密钥已注入时安装检查依赖，也避免系统解释器受 [PEP 668](https://peps.python.org/pep-0668/#marking-an-interpreter-as-using-an-external-package-manager) 管理时拒绝全局安装的兼容性风险；尚未确认 Codemagic 当前解释器是否带有该标记。运行：
+检查不安装包或 gem，CI 不执行 pip。`scripts/check-repository.py` 优先使用已有的 PyYAML；无法导入时通过系统 Ruby 的 YAML（Psych）`safe_load`（禁用 aliases、symbols 和对象类型）转成 JSON，继续运行全部结构断言及工作流 `bash -n`。Ruby 子进程只接收 PATH 和 UTF-8 locale，不继承通知凭据或 Ruby 启动配置，错误不输出解析器原文。若两个后端均不可用，只允许本地跳过并打印一行提示；环境中只要存在 `CI` 或 `CM_BUILD_ID`（包括空值），就必须失败。文档/转换错误、超时及意外子进程失败在本地也必须失败。
+
+[Codemagic Xcode 26.6 规格](https://docs.codemagic.io/specs-macos/xcode-26-6/)列出 Mac mini M2 和预装 Ruby **4.0.5**；[Psych 文档](https://docs.ruby-lang.org/en/4.0/Psych.html#method-c-safe_load)说明 `safe_load`，实现显式设置 `parse_symbols: false`。尚未在该镜像实际验证 `ruby -ryaml -rjson`，仍需运行时证据。本地当前没有 Ruby：mock 测试覆盖回退与完整结构检查，真实 Ruby 等价性（含 YES/NO、版本字符串、整数及块文本的值和类型）和拒绝用例在后端可用时运行，否则明确跳过。等价性限于当前两个无 aliases/日期的仓库文档，不承诺任意 YAML 的相同行为。
 
 ```bash
-python3 scripts/check-repository.py
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Tests -p 'test_*.py' -v
+python3 -B scripts/check-repository.py
+python3 -B -m unittest discover -s Tests -p 'test_*.py' -v
+python3 -B -S -m unittest discover -s Tests -p 'test_*.py' -v
+# -S 仅在本地模拟无 PyYAML；Ruby 可用时仍执行完整 YAML 检查
+env -u CI -u CM_BUILD_ID python3 -B -S scripts/check-repository.py
+env -u CM_BUILD_ID CI=1 python3 -B -S scripts/check-repository.py
 ```
+
+tracing 检查涵盖 `env` / `command` / `exec` 包装、命令替换和所有未引用 heredoc 正文（即便只是打印的文本）；引用或转义 delimiter 的正文保留字面含义，`set +x` 仍允许。此扫描器不递归解释 `bash -c` / `sh -c` 字符串，也不是完整 shell 分析器。
 
 测试用本地 curl 替身，不会触发真实 webhook；它验证完整参数和配置约定，并模拟可重试失败及 HTTPS/HTTP 重定向，不证明真实 curl 的重试或网络隔离。上线仍需在 Codemagic 分别验证成功构建、故意的普通脚本失败、空凭据和 webhook 不可达时的行为；TestFlight 的真实上传结果交由接收端验证。真实发布验证需另行授权。
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read-only checks that work without Xcode. These do not type-check Swift."""
 import json
+import os
 import pathlib
 import plistlib
 import re
@@ -11,18 +12,170 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
-def shell_source_without_heredocs(source):
-    """Keep shell commands, excluding literal heredoc bodies (including Python)."""
-    result = []
-    pending = []
-    quote = None
-    index = 0
+class YAMLBackendUnavailable(Exception):
+    """Neither installed YAML backend can start."""
+
+
+class YAMLProcessingError(Exception):
+    """A backend started but could not safely process the document."""
+
+
+RUBY_YAML = r'''
+STDIN.set_encoding(Encoding::UTF_8)
+STDOUT.set_encoding(Encoding::UTF_8)
+def validate(value)
+  case value
+  when NilClass, TrueClass, FalseClass, Integer, String
+  when Float
+    raise TypeError unless value.finite?
+  when Array
+    value.each { |item| validate(item) }
+  when Hash
+    value.each do |key, item|
+      raise TypeError unless key.instance_of?(String)
+      validate(item)
+    end
+  else
+    raise TypeError
+  end
+end
+begin
+  data = YAML.safe_load(STDIN.read, permitted_classes: [], permitted_symbols: [],
+                       aliases: false, symbolize_names: false, parse_symbols: false)
+  validate(data)
+  STDOUT.write(JSON.generate(data))
+rescue StandardError
+  exit 65
+end
+'''
+
+
+RUBY_PROBE = '''begin
+  require 'yaml'
+  require 'json'
+rescue LoadError
+  exit 69
+end'''
+
+
+def reject_json_constant(_):
+    raise ValueError('Non-finite JSON constant')
+
+
+def load_yaml_text(text):
+    """Prefer PyYAML; only an unavailable import permits the Ruby fallback.
+
+    Diagnostics deliberately exclude parser output and document contents.
+    """
+    try:
+        import yaml
+    except ImportError:
+        pass
+    else:
+        try:
+            return yaml.safe_load(text)
+        except Exception:
+            raise YAMLProcessingError('PyYAML document error') from None
+
+    environment = {'PATH': os.environ.get('PATH', os.defpath), 'LANG': 'en_US.UTF-8',
+                   'LC_ALL': 'en_US.UTF-8'}
+    options = dict(capture_output=True, encoding='utf-8', errors='strict',
+                   timeout=10, env=environment)
+    try:
+        probe = subprocess.run(['ruby', '-e', RUBY_PROBE], **options)
+    except FileNotFoundError:
+        raise YAMLBackendUnavailable('PyYAML and Ruby YAML/JSON are unavailable') from None
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        raise YAMLProcessingError('Ruby startup failure') from None
+    if probe.returncode != 0:
+        # Only the controlled, document-free require probe signals absence.
+        if probe.returncode == 69:
+            raise YAMLBackendUnavailable('PyYAML and Ruby YAML/JSON are unavailable')
+        raise YAMLProcessingError('Ruby startup failure')
+    try:
+        result = subprocess.run(['ruby', '-ryaml', '-rjson', '-e', RUBY_YAML],
+                                input=text, **options)
+        if result.returncode != 0:
+            raise YAMLProcessingError('Ruby document/conversion error')
+        return json.loads(result.stdout, parse_constant=reject_json_constant)
+    except YAMLProcessingError:
+        raise
+    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
+        raise YAMLProcessingError('Ruby processing/JSON error') from None
+
+
+def substitution_end(source, start, backtick=False):
+    """Find an expansion's end before shlex loses its quoting context."""
+    index, depth, quote = start, 1, None
     while index < len(source):
         char = source[index]
-        if char == '\\' and quote != "'":
-            if source[index:index + 2] != '\\\n':
+        if char == "\\" and quote != "'":
+            index += 2
+            continue
+        if backtick and char == '`':
+            return index
+        if quote != "'" and source.startswith('$(', index):
+            index = substitution_end(source, index + 2) + 1
+            continue
+        if quote != "'" and char == '`' and not backtick:
+            index = substitution_end(source, index + 1, backtick=True) + 1
+            continue
+        if char in ('"', "'"):
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+        elif quote is None and not backtick:
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                if depth == 0:
+                    return index
+        index += 1
+    raise ValueError('Unterminated shell substitution')
+
+
+def heredoc_expansions(body):
+    """Quotes in an unquoted heredoc do not suppress command substitution."""
+    expansions, index = [], 0
+    while index < len(body):
+        if body[index] == '\\' and body[index + 1:index + 2] in ('\\', '$', '`', '\n'):
+            index += 2
+            continue
+        if body.startswith('$(', index) or body[index] == '`':
+            backtick = body[index] == '`'
+            start = index + (1 if backtick else 2)
+            end = substitution_end(body, start, backtick)
+            expansions.append(body[start:end])
+            index = end + 1
+        else:
+            index += 1
+    return expansions
+
+
+def shell_parts(source):
+    """Separate expanding substitutions and unquoted heredocs from commands.
+
+    All unquoted heredoc bodies are scanned conservatively, even printed data.
+    Quoted/escaped delimiters make bodies literal, as in the notifier's Python.
+    """
+    result, expansions, pending = [], [], []
+    quote, index = None, 0
+    while index < len(source):
+        char = source[index]
+        if char == "\\" and quote != "'":
+            if source[index:index + 2] != "\\\n":
                 result.append(source[index:index + 2])
             index += 2
+            continue
+        if quote != "'" and (source.startswith('$(', index) or char == '`'):
+            backtick = char == '`'
+            start = index + (1 if backtick else 2)
+            end = substitution_end(source, start, backtick)
+            expansions.append(source[start:end])
+            result.append('__expansion__')
+            index = end + 1
             continue
         if char in ('"', "'"):
             if quote is None:
@@ -39,77 +192,252 @@ def shell_source_without_heredocs(source):
             index += 3
             continue
         if quote is None and source.startswith('<<', index):
-            match = re.match(r'''<<(-?)[ \t]*('([^']*)'|"([^"]*)"|([\w]+))''', source[index:])
-            if not match:
+            match = re.match(r"<<(-?)[ \t]*", source[index:])
+            start = end = index + len(match[0])
+            delimiter_quote = None
+            while end < len(source):
+                current = source[end]
+                if current == "\\" and delimiter_quote != "'":
+                    end += 2
+                    continue
+                if current in ('"', "'"):
+                    if delimiter_quote is None:
+                        delimiter_quote = current
+                    elif delimiter_quote == current:
+                        delimiter_quote = None
+                elif delimiter_quote is None and (current.isspace() or current in ';|&()<>'):
+                    break
+                end += 1
+            raw = source[start:end]
+            try:
+                words = shlex.split(raw)
+            except ValueError:
+                words = []
+            if len(words) != 1 or delimiter_quote:
                 raise ValueError('Unsupported shell heredoc delimiter')
-            pending.append((next(value for value in match.groups()[2:] if value is not None),
-                            bool(match[1])))
-            result.append(match[0])
-            index += len(match[0])
+            pending.append((words[0], bool(match[1]), any(c in raw for c in "'\"\\")))
+            result.append(source[index:end])
+            index = end
             continue
         result.append(char)
         index += 1
         if char == '\n' and quote is None and pending:
-            for delimiter, strip_tabs in pending:
+            for delimiter, strip_tabs, literal in pending:
+                body = []
                 while True:
                     if index >= len(source):
                         raise ValueError('Unterminated shell heredoc')
                     end = source.find('\n', index)
                     end = len(source) if end < 0 else end + 1
-                    line = source[index:end].rstrip('\n')
+                    line = source[index:end]
                     index = end
-                    if (line.lstrip('\t') if strip_tabs else line) == delimiter:
+                    if (line.lstrip('\t') if strip_tabs else line).rstrip('\n') == delimiter:
                         break
+                    body.append(line.lstrip('\t') if strip_tabs else line)
+                if not literal:
+                    text = ''.join(body)
+                    expansions.append(text)
+                    expansions.extend(heredoc_expansions(text))
             pending.clear()
     if pending:
         raise ValueError('Unterminated shell heredoc')
-    return ''.join(result)
+    return ''.join(result), expansions
 
 
-def enables_shell_tracing(source):
-    """Check command-position set/bash/sh flags, respecting option boundaries."""
-    # Removing comments first preserves their newline as a command boundary.
-    lexer = shlex.shlex(shell_source_without_heredocs(source), posix=True,
-                        punctuation_chars=';&|()\n')
+def split_env_string(value):
+    """Split literal env -S values (quotes, comments and GNU escape rules)."""
+    result, word, quote, index, started = [], [], None, 0, False
+    escapes = {'f': '\f', 'n': '\n', 'r': '\r', 't': '\t', 'v': '\v',
+               '#': '#', '$': '$', '"': '"', "'": "'", "\\": "\\"}
+    while index < len(value):
+        char = value[index]
+        if char == "\\" and quote != "'":
+            index += 1
+            if index == len(value):
+                raise ValueError('Invalid shell env split-string escape')
+            escaped = value[index]
+            if escaped == 'c' and quote is None:
+                break
+            if escaped == '_':
+                if quote == '"':
+                    word.append(' ')
+                elif started:
+                    result.append(''.join(word))
+                    word, started = [], False
+            elif escaped in escapes:
+                word.append(escapes[escaped])
+                started = True
+            else:
+                raise ValueError('Unsupported shell env split-string escape')
+        elif char in ('"', "'") and (quote is None or quote == char):
+            quote = char if quote is None else None
+            started = True
+        elif quote is None and char.isspace():
+            if started:
+                result.append(''.join(word))
+                word, started = [], False
+        elif quote is None and char == '#' and not started:
+            break
+        else:
+            word.append(char)
+            started = True
+        index += 1
+    if quote:
+        raise ValueError('Unterminated shell env split-string quote')
+    if started:
+        result.append(''.join(word))
+    return result
+
+
+def unwrap_shell_command(words):
+    """Unwrap literal command/env/exec prefixes without inspecting arguments."""
+    words = list(words)
+    while words:
+        while words and re.match(r'^\w+=', words[0]):
+            words.pop(0)
+        if not words:
+            break
+        command = pathlib.PurePosixPath(words[0]).name
+        if command not in ('env', 'command', 'exec'):
+            return words
+        words.pop(0)
+        while words:
+            option = words[0]
+            if option == '--':
+                words.pop(0)
+                break
+            if not option.startswith('-') or option == '-':
+                if command == 'env' and option == '-':
+                    words.pop(0)
+                break
+            words.pop(0)
+            if command == 'command':
+                if 'v' in option or 'V' in option:
+                    return []  # Lookup only, never execution.
+                if not re.fullmatch(r'-p+', option):
+                    return []
+            elif command == 'exec':
+                flags = option[1:]
+                while flags:
+                    flag, flags = flags[0], flags[1:]
+                    if flag == 'a':
+                        if not flags:
+                            words = words[1:]
+                        break  # The rest of this option is argv[0].
+                    if flag not in 'cl':
+                        return []
+            elif option in ('--unset', '--chdir'):
+                words = words[1:]
+            elif option == '--split-string':
+                words = split_env_string(words[0]) + words[1:] if words else []
+            elif option.startswith('--split-string='):
+                words = split_env_string(option.split('=', 1)[1]) + words
+            elif (option in ('--ignore-environment', '--debug') or
+                  option.startswith(('--unset=', '--chdir='))):
+                pass
+            elif not option.startswith('--'):
+                flags = option[1:]
+                while flags:
+                    flag, flags = flags[0], flags[1:]
+                    if flag in 'uCS':
+                        value = flags if flags else (words.pop(0) if words else '')
+                        if flag == 'S':
+                            words = split_env_string(value) + words
+                        break
+                    if flag not in 'iv':
+                        return []
+            else:
+                return []
+    return []
+
+
+def shell_tokens(commands):
+    """Preserve literal punctuation so quoted ';' never becomes a boundary."""
+    prefix = '__shell_literal__'
+    while prefix in commands:
+        prefix += '_'
+    protected = {char: f'{prefix}{index}__' for index, char in enumerate(';&|()\n')}
+    encoded, index, quote = [], 0, None
+    while index < len(commands):
+        char = commands[index]
+        if char == '\\' and quote != "'" and index + 1 < len(commands):
+            following = commands[index + 1]
+            if quote is None and following in protected:
+                encoded.append(protected[following])
+            else:
+                encoded.append(char + protected.get(following, following))
+            index += 2
+            continue
+        if char in ('"', "'"):
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+        encoded.append(protected.get(char, char) if quote else char)
+        index += 1
+    lexer = shlex.shlex(''.join(encoded), posix=True, punctuation_chars=';&|()\n')
     lexer.whitespace = ' \t\r'
     lexer.whitespace_split = True
     lexer.commenters = ''
     try:
         tokens = list(lexer)
-        if source.startswith('#!'):
-            shebang = shlex.split(source.splitlines()[0][2:])
-            if shebang and pathlib.PurePosixPath(shebang[0]).name == 'env':
-                shebang = shebang[1:]
-                if shebang[:1] == ['-S']:
-                    shebang = shebang[1:]
-            tokens = shebang + ['\n'] + tokens
-    except ValueError as error:
-        raise ValueError(f'Cannot tokenize shell script: {error}') from error
+    except ValueError:
+        raise ValueError('Cannot tokenize shell script') from None
+    result = []
+    for token in tokens:
+        boundary = bool(token) and all(char in ';&|()\n' for char in token)
+        for char, marker in protected.items():
+            token = token.replace(marker, char)
+        result.append((token, boundary))
+    return result
 
-    command_position = True
-    for index, token in enumerate(tokens):
-        if token and all(char in ';&|()\n' for char in token):
-            command_position = True
+
+def enables_shell_tracing(source):
+    """Scan literal shell commands; bash/sh -c payload interpretation is excluded."""
+    commands, expansions = shell_parts(source)
+    if any(enables_shell_tracing(part) for part in expansions):
+        return True
+    tokens = shell_tokens(commands)
+    try:
+        if source.startswith('#!'):
+            shebang = [(word, False) for word in shlex.split(source.splitlines()[0][2:])]
+            tokens = shebang + [('\n', True)] + tokens
+    except ValueError:
+        raise ValueError('Cannot tokenize shell script') from None
+
+    segments, segment = [], []
+    for token, boundary in tokens + [('\n', True)]:
+        if boundary:
+            segments.append(segment)
+            segment = []
+        else:
+            segment.append(token)
+    for words in segments:
+        while words and (words[0] in ('if', 'then', 'elif', 'else', 'do', '!', '{', '}')
+                         or re.match(r'^\w+=', words[0])):
+            words.pop(0)
+        words = unwrap_shell_command(words)
+        if not words:
             continue
-        if not command_position:
-            continue
-        if token in ('if', 'then', 'elif', 'else', 'do', '!', '{', '}') or re.match(r'^\w+=', token):
-            continue
-        command_position = False
-        command = pathlib.PurePosixPath(token).name
+        command = pathlib.PurePosixPath(words[0]).name
         if command not in ('set', 'bash', 'sh'):
             continue
-        remaining = iter(tokens[index + 1:])
+        remaining = iter(words[1:])
         for option in remaining:
             if option == '--' or not option.startswith(('-', '+')):
                 break
-            if command != 'set' and option in ('-c', '+c'):
-                break
+            if command != 'set' and option.startswith('--'):
+                # Bash's argument-taking long options precede shell options.
+                if option in ('--rcfile', '--init-file'):
+                    next(remaining, '')
+                continue
             if option.startswith('-') and not option.startswith('--') and 'x' in option[1:]:
                 return True
-            if option.endswith('o'):
+            if command != 'set' and 'c' in option[1:]:
+                break
+            if option.endswith('o') or (command != 'set' and option.endswith('O')):
                 setting = next(remaining, '')
-                if option.startswith('-') and setting == 'xtrace':
+                if option.startswith('-') and option.endswith('o') and setting == 'xtrace':
                     return True
     return False
 
@@ -248,13 +576,10 @@ notifier = ROOT / 'scripts/notify-grokbot.sh'
 assert notifier.is_file(), 'Grok Bot notifier missing'
 assert not enables_shell_tracing(notifier.read_text()), 'Notifier must never enable shell tracing'
 assert notifier.read_text().splitlines()[1] == 'set +x', 'Disable inherited tracing first'
-try:
-    import yaml
-except ImportError:
-    print('SKIP: YAML-structure checks skipped because PyYAML is not installed')
-else:
-    config = yaml.safe_load((ROOT / 'codemagic.yaml').read_text())
-    project_spec = yaml.safe_load((ROOT / 'project.yml').read_text())
+
+
+def assert_repository_yaml(config, project_spec):
+    """Shared structural checks, independent of the YAML backend."""
     assert project_spec['targets']['JiangJing']['deploymentTarget'] == '16.0'
     assert 'JiangJingTests' in project_spec['targets']
     compile_workflow = config['workflows']['ios-simulator']
@@ -273,5 +598,23 @@ else:
         assert 'triggering' not in workflow
         assert workflow['environment']['xcode'] == '26.6'
         check_workflow_scripts(workflow_id, workflow)
+
+
+def check_repository_yaml():
+    documents = []
+    for filename in ('codemagic.yaml', 'project.yml'):
+        try:
+            documents.append(load_yaml_text((ROOT / filename).read_text(encoding='utf-8')))
+        except YAMLBackendUnavailable as error:
+            if 'CI' in os.environ or 'CM_BUILD_ID' in os.environ:
+                raise SystemExit(f'FAIL: {filename}: {error}; YAML checks are required in CI') from None
+            print(f'SKIP: YAML-structure checks: {error} (local run only)')
+            return
+        except YAMLProcessingError as error:
+            raise SystemExit(f'FAIL: {filename}: {error}') from None
+    assert_repository_yaml(*documents)
     print('PASS: YAML and embedded shell syntax; simulator only notifies; release settings preserved')
+
+
+check_repository_yaml()
 print('PASS: shell script syntax')

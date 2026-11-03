@@ -13,13 +13,29 @@ import tempfile
 import unittest
 from unittest import mock
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTIFIER = ROOT / 'scripts/notify-grokbot.sh'
+
+
+def load_checker():
+    with mock.patch.dict(os.environ), contextlib.redirect_stdout(io.StringIO()):
+        os.environ.pop('CI', None)
+        os.environ.pop('CM_BUILD_ID', None)
+        return runpy.run_path(str(ROOT / 'scripts/check-repository.py'))
+
+
+@contextlib.contextmanager
+def without_pyyaml():
+    original_import = builtins.__import__
+
+    def without_yaml(name, *args, **kwargs):
+        if name == 'yaml':
+            raise ImportError('simulated missing PyYAML')
+        return original_import(name, *args, **kwargs)
+
+    with mock.patch('builtins.__import__', side_effect=without_yaml):
+        yield
 
 # A local curl substitute records only test credentials; it never uses a network.
 CURL_STUB = r'''
@@ -96,6 +112,10 @@ sys.exit(22 if os.environ.get('CURL_SCENARIO') == 'retryable'
 
 
 class GrokBotNotificationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.checker = load_checker()
+
     def setUp(self):
         scratch = ROOT / '.build/notification-tests'
         scratch.mkdir(parents=True, exist_ok=True)
@@ -281,9 +301,11 @@ class GrokBotNotificationTests(unittest.TestCase):
         self.environment.pop('CM_BUILD_ID')
         self.assertEqual(self.run_notifier()['payload']['status'], 'failed')
 
-    @unittest.skipIf(yaml is None, 'PyYAML is not installed')
     def test_yaml_marker_is_last_best_effort_and_skipped_after_script_failure(self):
-        workflows = yaml.safe_load((ROOT / 'codemagic.yaml').read_text())['workflows']
+        try:
+            workflows = self.checker['load_yaml_text']((ROOT / 'codemagic.yaml').read_text())['workflows']
+        except self.checker['YAMLBackendUnavailable']:
+            self.skipTest('Neither PyYAML nor Ruby YAML/JSON is available')
         for workflow_id, workflow in workflows.items():
             marker = workflow['scripts'][-1]['script']
             result = subprocess.run(['/bin/bash', '-e', '-c', 'false\n' + marker],
@@ -305,8 +327,8 @@ class GrokBotNotificationTests(unittest.TestCase):
 class NotificationRepositoryGuardTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        with contextlib.redirect_stdout(io.StringIO()):
-            cls.checker = runpy.run_path(str(ROOT / 'scripts/check-repository.py'))
+        (ROOT / '.build/notification-tests').mkdir(parents=True, exist_ok=True)
+        cls.checker = load_checker()
 
     def test_trace_guard_rejects_enabling_flags(self):
         guard = self.checker['enables_shell_tracing']
@@ -330,7 +352,6 @@ class NotificationRepositoryGuardTests(unittest.TestCase):
                        'bash -o errexit script -x', '# bash -x script',
                        'echo "set -x"', "printf '%s' 'bash -x script'",
                        "cat <<'EOF'\nset -x\nbash -x script\nunclosed '\nEOF\nset +x",
-                       'cat <<-EOF\n\tsh -x script\n\tEOF\nset +o xtrace',
                        "python3 -c 'print(\"set -x\")'", 'echo "<<EOF"',
                        'cat <<<"set -x"', 'echo ok;# bash -x script\nset +x',
                        'echo ok # bash -x script\nset +x'):
@@ -341,6 +362,57 @@ class NotificationRepositoryGuardTests(unittest.TestCase):
         for source in ("echo 'unclosed", "cat <<'EOF'\nmissing delimiter"):
             with self.subTest(source=source), self.assertRaisesRegex(ValueError, 'shell'):
                 self.checker['enables_shell_tracing'](source)
+
+    def test_trace_guard_wrappers_substitutions_and_unquoted_heredocs(self):
+        positive = (
+            'env bash -x script', '/usr/bin/env bash -x script',
+            'command bash -x script', 'exec bash -x script',
+            'env -i TOKEN=-x bash -eux script', 'env -u TOKEN -C /tmp bash -o xtrace script',
+            'env --unset=TOKEN --chdir=/tmp -- bash -x script',
+            'env -uTOKEN -C/tmp bash -x script',
+            'env -iu TOKEN bash -x script', "env -iS 'bash -x' script",
+            'env --debug bash -x script', 'exec -claNAME bash -x script',
+            'exec -a name -c -l command -p env FLAG=value /bin/sh -ex script',
+            'command -- exec -- env -- bash -x script',
+            "env -S 'bash -eux' script", "env --split-string='sh -o xtrace' script",
+            "env -S'bash -x' script", r"env -S 'bash\_-x' script",
+            'env -S \'bash "-x"\' script',
+            'echo "$(env bash -x script)"', 'echo $(command sh -o xtrace script)',
+            'VALUE=$(exec bash -x script)', 'echo "$(echo $(sh -x script))"',
+            'echo `bash -x script`', 'echo "`env sh -x script`"',
+            'cat <<EOF\nbash -x script\nEOF\n',
+            'cat <<-EOF\n\tsh -x script\n\tEOF\nset +o xtrace',
+            'cat <<EOF\n$(bash -x script)\nEOF\n',
+            'cat <<EOF\n\'$(bash -x script)\'\nEOF\n',
+            'cat <<EOF\n\'`bash -x script`\'\nEOF\n',
+            "cat <<'LITERAL' <<RAW\nsh -x ignored\nLITERAL\nexec bash -x script\nRAW\n",
+        )
+        negative = (
+            'env bash script -x', 'env VALUE=-x bash script',
+            'env -u -x bash script', 'env -C -x bash script',
+            'command -v bash -x', 'command -V bash -x', 'command -pv bash -x',
+            'exec -a -x bash script', 'exec -c -l bash -- script -x',
+            'exec -a-x bash script', 'env -iu -x bash script',
+            "env -S 'bash script -x'", "env -S 'bash -- script -x'",
+            "env -S 'bash # -x'", r"env -S 'bash\c -x'",
+            'echo \'$(bash -x script)\'', 'echo \'`bash -x script`\'',
+            r'echo "\$(bash -x script)"', r'echo \`bash -x script\`',
+            'echo "$(printf \'%s\' \'bash -x script\')"',
+            'cat <<"EOF"\nbash -x script\nEOF\n',
+            'cat <<\\EOF\nbash -x script\nEOF\n',
+            'cat <<E"O"F\nbash -x script\nEOF\n',
+            "cat <<E'O'F\nbash -x script\nEOF\n",
+            'cat <<-\\EOF\n\tsh -x script\n\tEOF\n',
+            "cat <<'ONE' <<'TWO'\nsh -x script\nONE\nbash -x script\nTWO\n",
+            'env bash +x script', 'command set +o xtrace',
+            'bash -c \'echo literal\' -x', 'bash --rcfile -x script',
+            'echo ";" bash -x script', "echo ';' bash -x script",
+            'echo "\n" bash -x script', r'echo \; bash -x script',
+        )
+        for expected, sources in ((True, positive), (False, negative)):
+            for source in sources:
+                with self.subTest(source=source):
+                    self.assertIs(self.checker['enables_shell_tracing'](source), expected)
 
     def workflow(self, workflow_id='ios-simulator'):
         return {
@@ -392,28 +464,255 @@ class NotificationRepositoryGuardTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 self.checker['check_workflow_scripts']('ios-simulator', workflow)
 
-    def test_missing_pyyaml_skips_only_yaml_checks(self):
-        original_import = builtins.__import__
+    def repository_documents(self):
+        simulator = self.workflow()
+        simulator['environment'] = {'xcode': '26.6', 'groups': ['grokbot_notify']}
+        release = self.workflow('ios-testflight')
+        release['environment'] = {
+            'xcode': '26.6', 'groups': ['jiangjing_release', 'grokbot_notify'],
+            'ios_signing': {'distribution_type': 'app_store',
+                            'bundle_identifier': 'com.jiangjing.magnifier'}}
+        release['integrations'] = {'app_store_connect': 'stl2stp-app-store-connect'}
+        release['publishing']['app_store_connect'] = {
+            'auth': 'integration', 'submit_to_testflight': False, 'submit_to_app_store': False}
+        return ({'workflows': {'ios-simulator': simulator, 'ios-testflight': release}},
+                {'targets': {'JiangJing': {'deploymentTarget': '16.0'}, 'JiangJingTests': {}}})
 
-        def without_yaml(name, *args, **kwargs):
-            if name == 'yaml':
-                raise ImportError('simulated missing PyYAML')
-            return original_import(name, *args, **kwargs)
+    def test_pyyaml_preferred_and_parse_failure_never_retries_ruby(self):
+        loader = self.checker['load_yaml_text']
+        fake_yaml = mock.Mock()
+        fake_yaml.safe_load.return_value = {'yes': True}
+        with mock.patch.dict(sys.modules, yaml=fake_yaml), mock.patch('subprocess.run') as ruby:
+            self.assertEqual(loader('anything'), {'yes': True})
+            fake_yaml.safe_load.assert_called_once_with('anything')
+            ruby.assert_not_called()
+            fake_yaml.safe_load.side_effect = ValueError('secret document content')
+            with self.assertRaisesRegex(self.checker['YAMLProcessingError'], '^PyYAML document error$'):
+                loader('private input')
+            ruby.assert_not_called()
 
+    def test_ruby_fallback_uses_stdin_utf8_and_minimal_environment(self):
+        calls = []
+
+        def ruby(command, **kwargs):
+            calls.append((command, kwargs))
+            return subprocess.CompletedProcess(command, 0, '{"enabled":true,"version":"16.0"}', '')
+
+        with without_pyyaml(), mock.patch('subprocess.run', side_effect=ruby), mock.patch.dict(
+                os.environ, {'GROKBOT_WEBHOOK_KEY': 'secret', 'RUBYOPT': '-rprivate',
+                             'RUBYLIB': '/private', 'BUNDLE_GEMFILE': '/private'}):
+            self.assertEqual(self.checker['load_yaml_text']('enabled: YES'),
+                             {'enabled': True, 'version': '16.0'})
+        self.assertEqual(len(calls), 2)
+        for command, options in calls:
+            self.assertEqual(command[0], 'ruby')
+            self.assertNotIn('enabled: YES', command)
+            self.assertEqual(set(options['env']), {'PATH', 'LANG', 'LC_ALL'})
+            self.assertEqual(options['encoding'], 'utf-8')
+            self.assertEqual(options['timeout'], 10)
+            self.assertTrue(options['capture_output'])
+        self.assertNotIn('input', calls[0][1])
+        self.assertEqual(calls[0][0], ['ruby', '-e', self.checker['RUBY_PROBE']])
+        self.assertEqual(calls[1][0][:4], ['ruby', '-ryaml', '-rjson', '-e'])
+        self.assertEqual(calls[1][1]['input'], 'enabled: YES')
+        program = calls[1][0][-1]
+        for setting in ('YAML.safe_load', 'permitted_classes: []', 'permitted_symbols: []',
+                        'aliases: false', 'symbolize_names: false', 'parse_symbols: false'):
+            self.assertIn(setting, program)
+
+    def test_ruby_availability_is_distinct_from_processing_failure(self):
+        success = subprocess.CompletedProcess([], 0, '', '')
+        cases = [
+            ([FileNotFoundError('private')], 'YAMLBackendUnavailable'),
+            ([subprocess.CompletedProcess([], 69, '', '')],
+             'YAMLBackendUnavailable'),
+            ([subprocess.CompletedProcess([], 1, '', 'unexpected LoadError')], 'YAMLProcessingError'),
+            ([PermissionError('private')], 'YAMLProcessingError'),
+            ([subprocess.CompletedProcess([], 2, 'private', 'private')], 'YAMLProcessingError'),
+            ([subprocess.TimeoutExpired('private', 10)], 'YAMLProcessingError'),
+            ([success, subprocess.CompletedProcess([], 65, 'private', 'private')], 'YAMLProcessingError'),
+            ([success, subprocess.CompletedProcess([], 0, 'private invalid JSON', '')], 'YAMLProcessingError'),
+            ([success, subprocess.CompletedProcess([], 0, 'NaN', '')], 'YAMLProcessingError'),
+            ([success, subprocess.TimeoutExpired('private', 10)], 'YAMLProcessingError'),
+            ([success, OSError('private')], 'YAMLProcessingError'),
+            ([success, FileNotFoundError('private')], 'YAMLProcessingError'),
+            ([success, subprocess.SubprocessError('private')], 'YAMLProcessingError'),
+        ]
+        for effects, error_type in cases:
+            with self.subTest(effects=effects), without_pyyaml(), \
+                    mock.patch('subprocess.run', side_effect=effects), \
+                    self.assertRaises(self.checker[error_type]) as raised:
+                self.checker['load_yaml_text']('private YAML')
+            self.assertNotIn('private', str(raised.exception))
+
+    def run_mocked_ruby_checker(self, documents):
+        actual_run = subprocess.run
+        embedded_checks = []
         output = io.StringIO()
-        with mock.patch('builtins.__import__', side_effect=without_yaml), \
-                mock.patch('subprocess.run', wraps=subprocess.run) as shell_checks, \
-                contextlib.redirect_stdout(output):
+        texts = [(ROOT / filename).read_text() for filename in ('codemagic.yaml', 'project.yml')]
+
+        def dispatch(command, **kwargs):
+            if command[0] == 'ruby':
+                result = json.dumps(documents[texts.index(kwargs['input'])]) if 'input' in kwargs else ''
+                return subprocess.CompletedProcess(command, 0, result, '')
+            self.assertEqual(command[:2], ['bash', '-n'])
+            if 'input' in kwargs:
+                embedded_checks.append(kwargs['input'])
+                kwargs['capture_output'] = True
+            return actual_run(command, **kwargs)
+
+        with mock.patch.dict(os.environ, CI='1'), without_pyyaml(), \
+                mock.patch('subprocess.run', side_effect=dispatch), contextlib.redirect_stdout(output):
             runpy.run_path(str(ROOT / 'scripts/check-repository.py'))
-        lines = output.getvalue().splitlines()
-        self.assertEqual([line for line in lines if line.startswith('SKIP:')],
-                         ['SKIP: YAML-structure checks skipped because PyYAML is not installed'])
+        return embedded_checks, output.getvalue()
+
+    def test_mocked_ruby_runs_full_structure_and_embedded_syntax_checks(self):
+        scripts, output = self.run_mocked_ruby_checker(self.repository_documents())
+        self.assertEqual(len(scripts), 6)
+        self.assertIn('PASS: YAML and embedded shell syntax', output)
+        self.assertNotIn('SKIP:', output)
+
+    def test_mocked_ruby_rejects_all_structural_contract_regressions(self):
+        # Mutate one contract at a time; all run through Ruby JSON and the CLI.
+        mutations = [
+            (('workflows', 'ios-simulator', 'scripts', -1, 'name'), 'wrong'),
+            (('workflows', 'ios-simulator', 'scripts', -1, 'script'), 'true'),
+            (('workflows', 'ios-simulator', 'environment', 'xcode'), 'other'),
+            (('workflows', 'ios-testflight', 'environment', 'xcode'), 'other'),
+            (('workflows', 'ios-simulator', 'environment', 'groups'), []),
+            (('workflows', 'ios-testflight', 'environment', 'groups'), []),
+            (('workflows', 'ios-testflight', 'environment', 'ios_signing', 'distribution_type'), 'other'),
+            (('workflows', 'ios-testflight', 'integrations', 'app_store_connect'), 'other'),
+            (('workflows', 'ios-testflight', 'publishing', 'app_store_connect', 'auth'), 'other'),
+            (('workflows', 'ios-testflight', 'publishing', 'app_store_connect', 'submit_to_testflight'), True),
+            (('workflows', 'ios-testflight', 'publishing', 'app_store_connect', 'submit_to_app_store'), True),
+            (('workflows', 'ios-simulator', 'publishing', 'scripts', 0, 'script'), 'false'),
+            (('workflows', 'ios-testflight', 'scripts', 0, 'script'), 'env bash -x script'),
+            (('workflows', 'ios-simulator', 'integrations'), {}),
+            (('workflows', 'ios-simulator', 'triggering'), {}),
+            (('workflows', 'ios-testflight', 'triggering'), {}),
+            (('workflows', 'ios-simulator', 'publishing', 'app_store_connect'), {}),
+            (('workflows', 'ios-testflight', 'publishing', 'extra'), {}),
+        ]
+        for path, value in mutations:
+            with self.subTest(path=path):
+                documents = self.repository_documents()
+                target = documents[0]
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                with self.assertRaises(AssertionError):
+                    self.run_mocked_ruby_checker(documents)
+        documents = self.repository_documents()
+        documents[0]['workflows']['ios-testflight']['scripts'][0]['script'] = 'if then'
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_mocked_ruby_checker(documents)
+        for project in ({'targets': {'JiangJing': {'deploymentTarget': '15.0'}, 'JiangJingTests': {}}},
+                        {'targets': {'JiangJing': {'deploymentTarget': '16.0'}}}):
+            with self.assertRaises(AssertionError):
+                self.run_mocked_ruby_checker((self.repository_documents()[0], project))
+
+    def test_cli_backend_policy_with_explicit_subprocess_environments(self):
+        # -S simulates absent PyYAML. A bash-only PATH makes Ruby absence deterministic.
+        with tempfile.TemporaryDirectory(dir=ROOT / '.build/notification-tests') as directory:
+            Path(directory, 'bash').symlink_to('/bin/bash')
+            for additions in ({}, {'CI': '1'}, {'CI': ''}, {'CM_BUILD_ID': 'build'}, {'CM_BUILD_ID': ''}):
+                environment = {'PATH': directory, **additions}
+                result = subprocess.run([sys.executable, '-B', '-S', 'scripts/check-repository.py'],
+                                        cwd=ROOT, env=environment, capture_output=True, text=True)
+                with self.subTest(environment=additions):
+                    self.assertNotIn('PASS: YAML', result.stdout)
+                    if additions:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn('YAML checks are required in CI', result.stderr)
+                        self.assertIn('codemagic.yaml', result.stderr)
+                        self.assertNotIn('SKIP:', result.stdout)
+                    else:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(result.stdout.count('SKIP:'), 1)
+                        self.assertIn('PASS: shell script syntax', result.stdout)
+
+    def test_cli_local_skip_omits_only_yaml_and_embedded_checks(self):
+        actual_run = subprocess.run
+        shell_checks, output = [], io.StringIO()
+
+        def dispatch(command, **kwargs):
+            if command[0] == 'ruby':
+                raise FileNotFoundError('private')
+            shell_checks.append((command, kwargs))
+            return actual_run(command, **kwargs)
+
+        with mock.patch.dict(os.environ), without_pyyaml(), \
+                mock.patch('subprocess.run', side_effect=dispatch), contextlib.redirect_stdout(output):
+            os.environ.pop('CI', None)
+            os.environ.pop('CM_BUILD_ID', None)
+            runpy.run_path(str(ROOT / 'scripts/check-repository.py'))
+        self.assertEqual({command[-1] for command, _ in shell_checks},
+                         {str(path) for path in (ROOT / 'scripts').glob('*.sh')})
+        self.assertTrue(all('input' not in options for _, options in shell_checks))
         for expected in ('Info.plist and privacy', 'bilingual localization',
                          'no synchronous frameQueue', 'checked-in project', 'shell script syntax'):
-            self.assertTrue(any(expected in line for line in lines), expected)
-        self.assertFalse(any(line.startswith('PASS: YAML') for line in lines))
-        self.assertEqual({call.args[0][-1] for call in shell_checks.call_args_list},
-                         {str(path) for path in (ROOT / 'scripts').glob('*.sh')})
+            self.assertIn(expected, output.getvalue())
+        self.assertEqual(output.getvalue().count('SKIP:'), 1)
+        self.assertNotIn('PASS: YAML', output.getvalue())
+
+    def test_cli_document_errors_fail_locally_and_in_ci_without_parser_details(self):
+        namespace = self.checker['check_repository_yaml'].__globals__
+        for environment in ({}, {'CI': ''}):
+            for error in ('Ruby document/conversion error', 'Ruby processing/JSON error',
+                          'Ruby startup failure', 'PyYAML document error'):
+                output = io.StringIO()
+                with self.subTest(environment=environment, error=error), \
+                        mock.patch.dict(os.environ, environment, clear=True), \
+                        mock.patch.dict(namespace, load_yaml_text=mock.Mock(
+                            side_effect=self.checker['YAMLProcessingError'](error))), \
+                        contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as raised:
+                    self.checker['check_repository_yaml']()
+                self.assertEqual(str(raised.exception), f'FAIL: codemagic.yaml: {error}')
+                self.assertEqual(output.getvalue(), '')
+
+    def ruby_load(self, text):
+        with without_pyyaml():
+            try:
+                return self.checker['load_yaml_text'](text)
+            except self.checker['YAMLBackendUnavailable']:
+                self.skipTest('Ruby with YAML/JSON is not available locally')
+
+    def assert_same_types_and_values(self, left, right):
+        self.assertIs(type(left), type(right))
+        if isinstance(left, dict):
+            self.assertEqual(left.keys(), right.keys())
+            for key in left:
+                self.assertIs(type(key), str)
+                self.assert_same_types_and_values(left[key], right[key])
+        elif isinstance(left, list):
+            self.assertEqual(len(left), len(right))
+            for a, b in zip(left, right):
+                self.assert_same_types_and_values(a, b)
+        else:
+            self.assertEqual(left, right)
+
+    def test_live_ruby_matches_pyyaml_types_and_values(self):
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest('PyYAML is unavailable for live equivalence comparison')
+        texts = [(ROOT / filename).read_text() for filename in ('codemagic.yaml', 'project.yml')]
+        texts.append('yes_value: YES\nno_value: NO\nquoted: "YES"\nversion: "16.0"\n'
+                     'integer: 42\nboolean: false\nfloat: 1.25\nnull_value: null\n'
+                     'symbol_text: :name\nblock: |\n  line one\n  line two\n')
+        for text in texts:
+            self.assert_same_types_and_values(yaml.safe_load(text), self.ruby_load(text))
+
+    def test_live_ruby_rejects_unsafe_or_non_json_yaml(self):
+        self.ruby_load('probe: true')
+        for text in ('a: &anchor value\nb: *anchor', 'value: !ruby/symbol name',
+                     'value: !ruby/object:Object {}', 'value: 2026-11-04',
+                     'value: 2026-11-04T12:00:00Z', '1: value', 'true: value',
+                     'value: .inf', 'value: .nan', 'broken: ['):
+            with self.subTest(text=text), without_pyyaml(), \
+                    self.assertRaises(self.checker['YAMLProcessingError']):
+                self.checker['load_yaml_text'](text)
 
     def test_no_codemagic_api_credential_or_query_in_ci(self):
         source = NOTIFIER.read_text() + (ROOT / 'codemagic.yaml').read_text()
