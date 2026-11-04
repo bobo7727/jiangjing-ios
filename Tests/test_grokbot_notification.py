@@ -496,43 +496,108 @@ class NotificationRepositoryGuardTests(unittest.TestCase):
 
         def ruby(command, **kwargs):
             calls.append((command, kwargs))
-            return subprocess.CompletedProcess(command, 0, '{"enabled":true,"version":"16.0"}', '')
+            return subprocess.CompletedProcess(command, 0, b'{"enabled":true,"version":"16.0"}', b'')
 
-        with without_pyyaml(), mock.patch('subprocess.run', side_effect=ruby), mock.patch.dict(
-                os.environ, {'GROKBOT_WEBHOOK_KEY': 'secret', 'RUBYOPT': '-rprivate',
-                             'RUBYLIB': '/private', 'BUNDLE_GEMFILE': '/private'}):
-            self.assertEqual(self.checker['load_yaml_text']('enabled: YES'),
+        environment = {'PATH': 'relative/bin', 'HOME': '/home/build', 'LANG': 'C.UTF-8',
+                       'LC_CTYPE': 'en_US.utf8', 'LC_ALL': 'C',
+                       'GROKBOT_WEBHOOK_KEY': 'secret', 'RUBYOPT': '-rprivate',
+                       'RUBYLIB': '/private', 'BUNDLE_GEMFILE': '/private'}
+        with without_pyyaml(), mock.patch('subprocess.run', side_effect=ruby), \
+                mock.patch('shutil.which', return_value='relative/bin/ruby') as which, \
+                mock.patch.dict(os.environ, environment, clear=True):
+            self.assertEqual(self.checker['load_yaml_text']('enabled: YES # 文本'),
                              {'enabled': True, 'version': '16.0'})
+        which.assert_called_once_with('ruby', path='relative/bin')
+        executable = os.path.abspath('relative/bin/ruby')
         self.assertEqual(len(calls), 2)
         for command, options in calls:
-            self.assertEqual(command[0], 'ruby')
-            self.assertNotIn('enabled: YES', command)
-            self.assertEqual(set(options['env']), {'PATH', 'LANG', 'LC_ALL'})
-            self.assertEqual(options['encoding'], 'utf-8')
+            self.assertEqual(command[0], executable)
+            self.assertNotIn('enabled: YES # 文本', command)
+            self.assertEqual(options['env'], {'PATH': 'relative/bin', 'HOME': '/home/build',
+                                              'LANG': 'C.UTF-8', 'LC_CTYPE': 'en_US.utf8'})
+            for option in ('encoding', 'errors', 'text', 'shell'):
+                self.assertNotIn(option, options)
             self.assertEqual(options['timeout'], 10)
             self.assertTrue(options['capture_output'])
+        self.assertIs(calls[0][1]['env'], calls[1][1]['env'])
         self.assertNotIn('input', calls[0][1])
-        self.assertEqual(calls[0][0], ['ruby', '-e', self.checker['RUBY_PROBE']])
-        self.assertEqual(calls[1][0][:4], ['ruby', '-ryaml', '-rjson', '-e'])
-        self.assertEqual(calls[1][1]['input'], 'enabled: YES')
+        self.assertEqual(calls[0][0], [executable, '-e', self.checker['RUBY_PROBE']])
+        self.assertEqual(calls[1][0][:4], [executable, '-ryaml', '-rjson', '-e'])
+        self.assertEqual(calls[1][1]['input'], 'enabled: YES # 文本'.encode('utf-8'))
         program = calls[1][0][-1]
         for setting in ('YAML.safe_load', 'permitted_classes: []', 'permitted_symbols: []',
                         'aliases: false', 'symbolize_names: false', 'parse_symbols: false'):
             self.assertIn(setting, program)
 
+    def test_ruby_environment_defaults_and_locale_allowlist(self):
+        for home in ('', 'relative/home', '/home/build'):
+            for locale in ('', 'C', 'en_US', 'en_US.ISO-8859-1', 'not-UTF-8',
+                           'en_US.UTF-8\nRUBYOPT=x', 'C.UTF-8', 'en_US.utf8',
+                           'UTF-8', 'zh_CN.UTF-8@variant'):
+                with self.subTest(home=home, locale=locale), mock.patch.dict(
+                        os.environ, {'HOME': home, 'LANG': locale, 'LC_ALL': locale,
+                                     'LC_CTYPE': locale}, clear=True):
+                    expected = {'PATH': os.defpath}
+                    if home == '/home/build':
+                        expected['HOME'] = home
+                    if locale in ('C.UTF-8', 'en_US.utf8', 'UTF-8', 'zh_CN.UTF-8@variant'):
+                        expected.update(dict.fromkeys(('LANG', 'LC_ALL', 'LC_CTYPE'), locale))
+                    self.assertEqual(self.checker['ruby_environment'](), expected)
+        with mock.patch.dict(os.environ, {'PATH': ''}, clear=True):
+            self.assertEqual(self.checker['ruby_environment'](), {'PATH': ''})
+
+    def test_executable_stub_receives_only_allowlist_and_preserves_symlink(self):
+        # Use actual executable lookup and subprocesses, even on Ruby-free hosts.
+        with tempfile.TemporaryDirectory(dir=ROOT / '.build/notification-tests') as directory:
+            directory = Path(directory)
+            record = directory / 'ruby.jsonl'
+            target = directory / 'ruby-shim'
+            target.write_text('#!' + sys.executable + '\n' +
+                              'import json, os, sys\n' +
+                              f'with open({str(record)!r}, "a") as stream:\n' +
+                              '    stream.write(json.dumps({"argv": sys.argv, "env": dict(os.environ), '
+                              '"input": sys.stdin.read()}) + "\\n")\n' +
+                              'print(\'{"enabled": true}\')\n')
+            target.chmod(0o700)
+            executable = directory / 'ruby'
+            executable.symlink_to(target)
+            environment = {'PATH': os.path.relpath(directory), 'HOME': str(directory),
+                           'LANG': 'C.UTF-8', 'LC_ALL': 'en_US.UTF-8', 'LC_CTYPE': 'UTF-8'}
+            excluded = {'GROKBOT_WEBHOOK_KEY': 'q', 'GROKBOT_WEBHOOK_URL': 'https://private',
+                        'GROKBOT_OTHER': 'private', 'GEM_HOME': '/private', 'GEM_PATH': '/private',
+                        'GEMRC': '/private', 'GEM_REQUIREMENT_JSON': 'invalid',
+                        'RBENV_ROOT': '/private', 'RBENV_VERSION': 'invalid',
+                        'RBENV_HOOK_PATH': '/private', 'RBENV_DIR': '/private',
+                        'RBENV_DEBUG': '1', 'BUNDLE_GEMFILE': '/private',
+                        'RUBYOPT': '-rprivate', 'RUBYLIB': '/private',
+                        'RUBYGEMS_GEMDEPS': '-', 'BASH_ENV': '/private', 'ENV': '/private',
+                        'AWS_ACCESS_KEY_ID': 'credential', 'CM_BUILD_ID': 'release',
+                        'UNRELATED': 'private'}
+            with without_pyyaml(), mock.patch.dict(os.environ, {**environment, **excluded}, clear=True):
+                self.assertEqual(self.checker['load_yaml_text']('enabled: YES # 文本'), {'enabled': True})
+            calls = [json.loads(line) for line in record.read_text().splitlines()]
+            self.assertEqual(len(calls), 2)
+            for call in calls:
+                self.assertEqual(call['argv'][0], str(executable))
+                self.assertEqual(call['env'], environment)
+                self.assertFalse(set(call['env']) & set(excluded))
+            self.assertEqual(calls[0]['input'], '')
+            self.assertEqual(calls[1]['input'], 'enabled: YES # 文本')
+
     def test_ruby_availability_is_distinct_from_processing_failure(self):
-        success = subprocess.CompletedProcess([], 0, '', '')
+        success = subprocess.CompletedProcess([], 0, b'', b'')
         cases = [
-            ([FileNotFoundError('private')], 'YAMLBackendUnavailable'),
-            ([subprocess.CompletedProcess([], 69, '', '')],
+            ([FileNotFoundError('private')], 'YAMLProcessingError'),
+            ([subprocess.CompletedProcess([], 69, b'', b'cannot load yaml')],
              'YAMLBackendUnavailable'),
-            ([subprocess.CompletedProcess([], 1, '', 'unexpected LoadError')], 'YAMLProcessingError'),
+            ([subprocess.CompletedProcess([], 1, b'', b'unexpected LoadError')], 'YAMLProcessingError'),
             ([PermissionError('private')], 'YAMLProcessingError'),
-            ([subprocess.CompletedProcess([], 2, 'private', 'private')], 'YAMLProcessingError'),
+            ([subprocess.CompletedProcess([], 2, b'private', b'probe error')], 'YAMLProcessingError'),
             ([subprocess.TimeoutExpired('private', 10)], 'YAMLProcessingError'),
-            ([success, subprocess.CompletedProcess([], 65, 'private', 'private')], 'YAMLProcessingError'),
-            ([success, subprocess.CompletedProcess([], 0, 'private invalid JSON', '')], 'YAMLProcessingError'),
-            ([success, subprocess.CompletedProcess([], 0, 'NaN', '')], 'YAMLProcessingError'),
+            ([success, subprocess.CompletedProcess([], 65, b'private', b'private')], 'YAMLProcessingError'),
+            ([success, subprocess.CompletedProcess([], 0, b'private invalid JSON', b'')], 'YAMLProcessingError'),
+            ([success, subprocess.CompletedProcess([], 0, b'NaN', b'')], 'YAMLProcessingError'),
+            ([success, subprocess.CompletedProcess([], 0, b'{"value":"\xff"}', b'')], 'YAMLProcessingError'),
             ([success, subprocess.TimeoutExpired('private', 10)], 'YAMLProcessingError'),
             ([success, OSError('private')], 'YAMLProcessingError'),
             ([success, FileNotFoundError('private')], 'YAMLProcessingError'),
@@ -540,10 +605,89 @@ class NotificationRepositoryGuardTests(unittest.TestCase):
         ]
         for effects, error_type in cases:
             with self.subTest(effects=effects), without_pyyaml(), \
+                    mock.patch('shutil.which', return_value='/test/bin/ruby'), \
                     mock.patch('subprocess.run', side_effect=effects), \
                     self.assertRaises(self.checker[error_type]) as raised:
                 self.checker['load_yaml_text']('private YAML')
             self.assertNotIn('private', str(raised.exception))
+
+    def test_missing_ruby_lookup_does_not_launch(self):
+        with without_pyyaml(), mock.patch('shutil.which', return_value=None), \
+                mock.patch('subprocess.run') as run, \
+                self.assertRaises(self.checker['YAMLBackendUnavailable']):
+            self.checker['load_yaml_text']('private YAML')
+        run.assert_not_called()
+
+    def test_probe_diagnostics_include_metadata_and_safe_stderr(self):
+        cases = [
+            (subprocess.CompletedProcess([], 1, b'private YAML', b'cannot start\nsecond\nthird\nfourth'),
+             'YAMLProcessingError', 'exit=1', ('cannot start', 'second', 'third')),
+            (subprocess.CompletedProcess([], 69, b'private YAML', b'cannot load yaml\n\xff'),
+             'YAMLBackendUnavailable', 'exit=69', ('cannot load yaml', r'\ufffd')),
+            (subprocess.TimeoutExpired('private YAML', 10, output=b'private YAML', stderr=b'waiting'),
+             'YAMLProcessingError', 'timeout after 10s', ('waiting',)),
+            (FileNotFoundError('private YAML'), 'YAMLProcessingError', 'launch-error', ()),
+            (PermissionError('private YAML'), 'YAMLProcessingError', 'launch-error', ()),
+        ]
+        for result, error_type, status, details in cases:
+            with self.subTest(result=result), without_pyyaml(), \
+                    mock.patch('shutil.which', return_value='/test/bin/ruby'), \
+                    mock.patch.dict(os.environ, {}, clear=True), \
+                    mock.patch('subprocess.run', side_effect=[result]), \
+                    self.assertRaises(self.checker[error_type]) as raised:
+                self.checker['load_yaml_text']('private YAML')
+            diagnostic = str(raised.exception)
+            for expected in ('Ruby probe failure', 'executable=/test/bin/ruby', status, *details):
+                self.assertIn(expected, diagnostic)
+            self.assertNotIn('fourth', diagnostic)
+            self.assertNotIn('private YAML', diagnostic)
+            self.assertTrue(raised.exception.__suppress_context__)
+
+    def test_conversion_diagnostics_never_expose_output_or_exception_details(self):
+        cases = [
+            (subprocess.CompletedProcess([], 65, b'private YAML stdout', b'private YAML stderr'), 'exit=65'),
+            (subprocess.CompletedProcess([], 0, b'private YAML JSON error', b'private YAML stderr'), 'exit=0'),
+            (subprocess.CompletedProcess([], 0, b'{"value":"\xff"}', b'private YAML stderr'), 'exit=0'),
+            (subprocess.TimeoutExpired('private YAML', 10, output=b'private YAML stdout',
+                                       stderr=b'private YAML stderr'), 'timeout after 10s'),
+            (OSError('private YAML'), 'launch-error'),
+        ]
+        for result, status in cases:
+            with self.subTest(result=result), without_pyyaml(), \
+                    mock.patch('shutil.which', return_value='/test/bin/ruby'), \
+                    mock.patch.dict(os.environ, {}, clear=True), \
+                    mock.patch('subprocess.run', side_effect=[
+                        subprocess.CompletedProcess([], 0, b'', b''), result]), \
+                    self.assertRaises(self.checker['YAMLProcessingError']) as raised:
+                self.checker['load_yaml_text']('private YAML')
+            self.assertEqual(str(raised.exception),
+                             'Ruby conversion failure (executable=/test/bin/ruby; ' + status +
+                             ('; invalid UTF-8/JSON output' if status == 'exit=0' else '') + ')')
+            self.assertTrue(raised.exception.__suppress_context__)
+
+    def test_diagnostics_redact_before_line_and_byte_limits_and_escape_controls(self):
+        environment = {'GROKBOT_WEBHOOK_KEY': 'q', 'GROKBOT_WEBHOOK_URL': 'https://webhook-secret',
+                       'GROKBOT_OTHER': 'overlap', 'API_TOKEN': 'overlap-long',
+                       'AWS_SECRET_ACCESS_KEY': 'path-secret', 'DATABASE_PASSWORD': 'line\nsecret'}
+        stderr = b'q https://webhook-secret overlap-long overlap line\nsecret\nsecond\x1b\t\r\x00\nthird\nfourth'
+        with mock.patch.dict(os.environ, environment, clear=True):
+            diagnostic = self.checker['ruby_diagnostic'](
+                'probe', '/path-secret/ruby', 'exit=1', stderr)
+            bounded = self.checker['ruby_diagnostic'](
+                'probe', '/path-secret/ruby', 'exit=1', b'a' * 950 + b'overlap-long' * 30)
+        for value in environment.values():
+            self.assertNotIn(value, diagnostic)
+            self.assertNotIn(value, bounded)
+        self.assertIn('executable=/[REDACTED]/ruby', diagnostic)
+        self.assertNotIn('[REDACTED]-long', diagnostic)
+        self.assertIn(r'second\u001b\t\r\u0000', diagnostic)
+        self.assertNotIn('fourth', diagnostic)
+        self.assertTrue(all(32 <= ord(char) < 127 for char in diagnostic))
+        self.assertLessEqual(len(bounded.encode('utf-8')), 1024)
+        self.assertTrue(bounded.endswith('...'))
+        self.assertIn('[REDACTED]', bounded)
+        self.assertIn('STDERR.puts(error.message)', self.checker['RUBY_PROBE'])
+        self.assertNotIn('--disable-gems', self.checker['RUBY_PROBE'])
 
     def run_mocked_ruby_checker(self, documents):
         actual_run = subprocess.run
@@ -552,9 +696,10 @@ class NotificationRepositoryGuardTests(unittest.TestCase):
         texts = [(ROOT / filename).read_text() for filename in ('codemagic.yaml', 'project.yml')]
 
         def dispatch(command, **kwargs):
-            if command[0] == 'ruby':
-                result = json.dumps(documents[texts.index(kwargs['input'])]) if 'input' in kwargs else ''
-                return subprocess.CompletedProcess(command, 0, result, '')
+            if command[0] == '/test/bin/ruby':
+                result = (json.dumps(documents[texts.index(kwargs['input'].decode('utf-8'))])
+                          if 'input' in kwargs else '')
+                return subprocess.CompletedProcess(command, 0, result.encode('utf-8'), b'')
             self.assertEqual(command[:2], ['bash', '-n'])
             if 'input' in kwargs:
                 embedded_checks.append(kwargs['input'])
@@ -562,6 +707,7 @@ class NotificationRepositoryGuardTests(unittest.TestCase):
             return actual_run(command, **kwargs)
 
         with mock.patch.dict(os.environ, CI='1'), without_pyyaml(), \
+                mock.patch('shutil.which', return_value='/test/bin/ruby'), \
                 mock.patch('subprocess.run', side_effect=dispatch), contextlib.redirect_stdout(output):
             runpy.run_path(str(ROOT / 'scripts/check-repository.py'))
         return embedded_checks, output.getvalue()
@@ -637,12 +783,11 @@ class NotificationRepositoryGuardTests(unittest.TestCase):
         shell_checks, output = [], io.StringIO()
 
         def dispatch(command, **kwargs):
-            if command[0] == 'ruby':
-                raise FileNotFoundError('private')
             shell_checks.append((command, kwargs))
             return actual_run(command, **kwargs)
 
         with mock.patch.dict(os.environ), without_pyyaml(), \
+                mock.patch('shutil.which', return_value=None), \
                 mock.patch('subprocess.run', side_effect=dispatch), contextlib.redirect_stdout(output):
             os.environ.pop('CI', None)
             os.environ.pop('CM_BUILD_ID', None)

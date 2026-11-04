@@ -6,6 +6,7 @@ import pathlib
 import plistlib
 import re
 import shlex
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 
@@ -13,11 +14,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class YAMLBackendUnavailable(Exception):
-    """Neither installed YAML backend can start."""
+    """No YAML backend was found, or Ruby's require probe reports absence."""
 
 
 class YAMLProcessingError(Exception):
-    """A backend started but could not safely process the document."""
+    """A selected backend could not start or safely process the document."""
 
 
 RUBY_YAML = r'''
@@ -53,7 +54,8 @@ end
 RUBY_PROBE = '''begin
   require 'yaml'
   require 'json'
-rescue LoadError
+rescue LoadError => error
+  STDERR.puts(error.message)
   exit 69
 end'''
 
@@ -62,10 +64,47 @@ def reject_json_constant(_):
     raise ValueError('Non-finite JSON constant')
 
 
+def ruby_environment():
+    """Allow PATH shims and their default HOME configuration, without overrides.
+
+    See docs/codemagic.md for rbenv and RubyGems' environment contracts.
+    """
+    environment = {'PATH': os.environ.get('PATH', os.defpath)}
+    home = os.environ.get('HOME', '')
+    if home and os.path.isabs(home):
+        environment['HOME'] = home
+    for name in ('LANG', 'LC_ALL', 'LC_CTYPE'):
+        value = os.environ.get(name, '')
+        if re.fullmatch(r'[^\s.]+\.UTF-?8(?:@[^\s]+)?|UTF-?8', value, re.IGNORECASE):
+            environment[name] = value
+    return environment
+
+
+def ruby_diagnostic(phase, executable, status, stderr=b''):
+    """Bound and redact metadata; only a document-free probe may expose stderr."""
+    diagnostic = f'Ruby {phase} failure (executable={executable}; {status})'
+    if phase == 'probe' and stderr:
+        diagnostic += '; stderr: ' + stderr.decode('utf-8', errors='replace')
+    secrets = {value for name, value in os.environ.items() if value and (
+        name.upper().startswith('GROKBOT_') or
+        re.search(r'KEY|SECRET|TOKEN|PASS(?:WORD|WD|PHRASE)?|CREDENTIAL|AUTH|COOKIE',
+                  name, re.IGNORECASE))}
+    if secrets:
+        # A single pass also protects one-character webhook secrets without
+        # reprocessing replacement markers. Redact before any output truncation.
+        pattern = '|'.join(re.escape(value) for value in sorted(secrets, key=len, reverse=True))
+        diagnostic = re.sub(pattern, '[REDACTED]', diagnostic)
+    diagnostic = '\n'.join(diagnostic.split('\n')[:3])
+    # ASCII escaping prevents terminal controls (and surrogate paths) from
+    # reaching the log; the final diagnostic is at most 1 KiB, including escapes.
+    diagnostic = json.dumps(diagnostic, ensure_ascii=True)[1:-1]
+    return diagnostic if len(diagnostic) <= 1024 else diagnostic[:1021] + '...'
+
+
 def load_yaml_text(text):
     """Prefer PyYAML; only an unavailable import permits the Ruby fallback.
 
-    Diagnostics deliberately exclude parser output and document contents.
+    Only the document-free require probe may contribute stderr to diagnostics.
     """
     try:
         import yaml
@@ -77,31 +116,46 @@ def load_yaml_text(text):
         except Exception:
             raise YAMLProcessingError('PyYAML document error') from None
 
-    environment = {'PATH': os.environ.get('PATH', os.defpath), 'LANG': 'en_US.UTF-8',
-                   'LC_ALL': 'en_US.UTF-8'}
-    options = dict(capture_output=True, encoding='utf-8', errors='strict',
-                   timeout=10, env=environment)
-    try:
-        probe = subprocess.run(['ruby', '-e', RUBY_PROBE], **options)
-    except FileNotFoundError:
+    environment = ruby_environment()
+    executable = shutil.which('ruby', path=environment['PATH'])
+    if executable is None:
         raise YAMLBackendUnavailable('PyYAML and Ruby YAML/JSON are unavailable') from None
-    except (OSError, subprocess.SubprocessError, UnicodeError):
-        raise YAMLProcessingError('Ruby startup failure') from None
+    # Do not resolve symlinks: version-manager shims can depend on their path.
+    executable = os.path.abspath(executable)
+    options = dict(capture_output=True, timeout=10, env=environment)
+    try:
+        probe = subprocess.run([executable, '-e', RUBY_PROBE], **options)
+    except subprocess.TimeoutExpired as error:
+        raise YAMLProcessingError(ruby_diagnostic(
+            'probe', executable, 'timeout after 10s', error.stderr)) from None
+    except (OSError, subprocess.SubprocessError):
+        raise YAMLProcessingError(ruby_diagnostic(
+            'probe', executable, 'launch-error')) from None
     if probe.returncode != 0:
         # Only the controlled, document-free require probe signals absence.
-        if probe.returncode == 69:
-            raise YAMLBackendUnavailable('PyYAML and Ruby YAML/JSON are unavailable')
-        raise YAMLProcessingError('Ruby startup failure')
+        error_type = YAMLBackendUnavailable if probe.returncode == 69 else YAMLProcessingError
+        raise error_type(ruby_diagnostic(
+            'probe', executable, f'exit={probe.returncode}', probe.stderr)) from None
     try:
-        result = subprocess.run(['ruby', '-ryaml', '-rjson', '-e', RUBY_YAML],
-                                input=text, **options)
-        if result.returncode != 0:
-            raise YAMLProcessingError('Ruby document/conversion error')
-        return json.loads(result.stdout, parse_constant=reject_json_constant)
-    except YAMLProcessingError:
-        raise
-    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
-        raise YAMLProcessingError('Ruby processing/JSON error') from None
+        result = subprocess.run([executable, '-ryaml', '-rjson', '-e', RUBY_YAML],
+                                input=text.encode('utf-8'), **options)
+    except subprocess.TimeoutExpired:
+        raise YAMLProcessingError(ruby_diagnostic(
+            'conversion', executable, 'timeout after 10s')) from None
+    except (OSError, subprocess.SubprocessError):
+        raise YAMLProcessingError(ruby_diagnostic(
+            'conversion', executable, 'launch-error')) from None
+    except UnicodeError:
+        raise YAMLProcessingError(ruby_diagnostic(
+            'conversion', executable, 'input encoding error')) from None
+    if result.returncode != 0:
+        raise YAMLProcessingError(ruby_diagnostic(
+            'conversion', executable, f'exit={result.returncode}')) from None
+    try:
+        return json.loads(result.stdout.decode('utf-8'), parse_constant=reject_json_constant)
+    except (UnicodeError, ValueError):
+        raise YAMLProcessingError(ruby_diagnostic(
+            'conversion', executable, 'exit=0; invalid UTF-8/JSON output')) from None
 
 
 def substitution_end(source, start, backtick=False):
