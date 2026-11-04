@@ -96,5 +96,7 @@ JiangJing/
 
 当前变更和未完成验收见 [docs/implementation-validation.md](docs/implementation-validation.md)。
 可在 Linux 执行 `python3 scripts/check-repository.py`；有 Swift 5.9+ 时执行 `swift test`。
+仓库检查会在 `JiangJing/` 和 `JiangJingTests/` 的 Swift 文件中拒绝独立名称 `kCVPixelFormatTypeKey`，并报告文件和行号；这是文本检查，注释和字符串中的同名内容也会匹配。
+`swift test` 不编译 `CameraController.swift`；相机代码的类型检查仍需 Xcode。
 iOS 集成测试需 Mac：重新生成工程后运行 `xcodebuild test -project JiangJing.xcodeproj -scheme JiangJing -destination 'platform=iOS Simulator,name=<可用的 iPhone 模拟器>'`。
 相机硬件仍需 iOS 16 和当前系统真机验证。静态检查不能证明 Swift 编译成功。

@@ -508,7 +508,7 @@ final class CameraController: NSObject, ObservableObject {
 
         videoOutput.alwaysDiscardsLateVideoFrames = true
         let pixelFormat: [String: Any] = [
-            kCVPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ]
         videoOutput.videoSettings = pixelFormat
         videoOutput.setSampleBufferDelegate(self, queue: frameQueue)

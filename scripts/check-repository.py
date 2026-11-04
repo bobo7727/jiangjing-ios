@@ -262,7 +262,26 @@ def openstep(text):
     assert index == len(tokens), 'Trailing OpenStep tokens'
     return result
 
+
+def check_swift_pixel_format_key(text, filename):
+    """Reject the invalid bare name, including occurrences in comments/strings."""
+    for line_number, line in enumerate(text.splitlines(), 1):
+        if re.search(r'\bkCVPixelFormatTypeKey\b', line):
+            raise ConfigurationError('{}:{}: use kCVPixelBufferPixelFormatTypeKey'.format(
+                filename, line_number))
+
+
+def check_swift_pixel_format_keys():
+    """Scan app and XCTest sources independently of the existing app-only checks."""
+    for directory in ('JiangJing', 'JiangJingTests'):
+        for source in sorted((ROOT / directory).rglob('*.swift')):
+            check_swift_pixel_format_key(
+                source.read_text(encoding='utf-8'), source.relative_to(ROOT))
+
+
 def main():
+    check_swift_pixel_format_keys()
+    print('PASS: no invalid pixel-format key in app or XCTest Swift sources')
     info = plistlib.loads((ROOT / 'JiangJing/Info.plist').read_bytes())
     assert info['ITSAppUsesNonExemptEncryption'] is False
     permissions = ('NSCameraUsageDescription', 'NSMicrophoneUsageDescription', 'NSPhotoLibraryAddUsageDescription')

@@ -1,4 +1,4 @@
-"""In-memory checks for the repository's documented configuration layout."""
+"""In-memory checks for repository configuration and the Swift identifier guard."""
 import contextlib
 import importlib.util
 import io
@@ -88,6 +88,76 @@ xcode-project build-ipa --project JiangJing.xcodeproj --scheme JiangJing \
   --export-options-plist=/Users/builder/export_options.plist 2>&1 | tee build/archive.log
 """,
 )
+
+
+class SwiftPixelFormatKeyTests(unittest.TestCase):
+    def test_invalid_key_reports_one_based_line_number(self):
+        text = '\nlet settings = [\n    kCVPixelFormatTypeKey as String: 0\n]\n'
+        with self.assertRaises(CHECKER.ConfigurationError) as failure:
+            CHECKER.check_swift_pixel_format_key(text, 'JiangJing/Camera/CameraController.swift')
+        self.assertEqual(str(failure.exception),
+                         'JiangJing/Camera/CameraController.swift:3: '
+                         'use kCVPixelBufferPixelFormatTypeKey')
+
+    def test_first_line_is_one(self):
+        with self.assertRaisesRegex(CHECKER.ConfigurationError, r'^Example.swift:1: use '):
+            CHECKER.check_swift_pixel_format_key('kCVPixelFormatTypeKey', 'Example.swift')
+
+    def test_correct_key_bgra_and_longer_identifiers_are_allowed(self):
+        for identifier in ('kCVPixelBufferPixelFormatTypeKey', 'kCVPixelFormatType_32BGRA',
+                           'kCVPixelFormatTypeKeySuffix', 'prefixkCVPixelFormatTypeKey',
+                           '_kCVPixelFormatTypeKey', 'kCVPixelFormatTypeKey_'):
+            with self.subTest(identifier=identifier):
+                CHECKER.check_swift_pixel_format_key(identifier, 'Example.swift')
+
+    def test_comments_and_strings_are_also_rejected(self):
+        for line in ('// kCVPixelFormatTypeKey', '/* kCVPixelFormatTypeKey */',
+                     'let name = "kCVPixelFormatTypeKey"'):
+            with self.subTest(line=line), self.assertRaisesRegex(
+                    CHECKER.ConfigurationError, r'^Example.swift:2: use '):
+                CHECKER.check_swift_pixel_format_key('\n' + line, 'Example.swift')
+
+    def test_scan_discovers_and_reads_both_source_directories(self):
+        sources = [ROOT / 'JiangJing/Camera/CameraController.swift',
+                   ROOT / 'JiangJingTests/ExampleTests.swift']
+
+        def discover(directory, pattern):
+            self.assertEqual(pattern, '*.swift')
+            return iter(source for source in sources if directory in source.parents)
+
+        with mock.patch.object(Path, 'rglob', autospec=True, side_effect=discover) as rglob, \
+                mock.patch.object(Path, 'read_text', autospec=True,
+                                  return_value='kCVPixelBufferPixelFormatTypeKey') as read:
+            CHECKER.check_swift_pixel_format_keys()
+        self.assertEqual(rglob.call_args_list, [
+            mock.call(ROOT / 'JiangJing', '*.swift'),
+            mock.call(ROOT / 'JiangJingTests', '*.swift')])
+        self.assertEqual(read.call_args_list, [
+            mock.call(source, encoding='utf-8') for source in sources])
+
+    def test_scan_rejects_invalid_key_in_either_directory(self):
+        for directory in ('JiangJing', 'JiangJingTests'):
+            with self.subTest(directory=directory):
+                source = ROOT / directory / 'Example.swift'
+
+                def discover(path, pattern):
+                    return iter([source] if path == source.parent else [])
+
+                with mock.patch.object(Path, 'rglob', autospec=True, side_effect=discover), \
+                        mock.patch.object(Path, 'read_text', autospec=True,
+                                          return_value='\nkCVPixelFormatTypeKey'), \
+                        self.assertRaises(CHECKER.ConfigurationError) as failure:
+                    CHECKER.check_swift_pixel_format_keys()
+                self.assertEqual(str(failure.exception),
+                                 directory + '/Example.swift:2: '
+                                 'use kCVPixelBufferPixelFormatTypeKey')
+
+    def test_entry_point_runs_swift_guard(self):
+        with mock.patch.object(CHECKER, 'check_swift_pixel_format_keys',
+                               side_effect=CHECKER.ConfigurationError('guard failed')) as scan, \
+                self.assertRaisesRegex(CHECKER.ConfigurationError, '^guard failed$'):
+            CHECKER.main()
+        scan.assert_called_once_with()
 
 
 class RepositoryConfigurationTests(unittest.TestCase):
