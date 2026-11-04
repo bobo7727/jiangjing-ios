@@ -19,7 +19,7 @@ Codemagic 应连接 GitHub 仓库 [bobo7727/jiangjing-ios](https://github.com/bo
 
 密钥和 API 私钥只放在 Codemagic，不写进 YAML，不提交 Git。
 
-先按下面的通知设置创建 `grokbot_notify` 组，再手动启动 `ios-simulator`。必须检查测试结果及完整并发诊断；不可将未解释的并发告警视为验收通过。zip 不能装到 iPhone，当前可用模拟器 runtime 的测试也不代表已运行 iOS 16。真机验收通过并补齐发布条件后，再单独启动 `ios-testflight`。
+先手动启动 `ios-simulator`。必须检查测试结果及完整并发诊断；不可将未解释的并发告警视为验收通过。zip 不能装到 iPhone，当前可用模拟器 runtime 的测试也不代表已运行 iOS 16。真机验收通过并补齐发布条件后，再单独启动 `ios-testflight`。
 
 ## 2. 在 Apple 侧登记应用
 
@@ -74,53 +74,6 @@ stl2stp-app-store-connect
 参考：[App Store Connect 发布](https://docs.codemagic.io/yaml-publishing/app-store-connect/)、[YAML 基础配置](https://docs.codemagic.io/yaml-basic-configuration/yaml-getting-started/)。
 
 这份配置要在 Codemagic 的 Mac 上跑过才能确认签名和 TestFlight。这里没有 Xcode，不能代替那一步。
-
-## Grok Bot 构建完成通知
-
-**启用本 YAML 的任何工作流之前**，bobo 需在 Codemagic → Team settings → Global variables and secrets 创建 **`grokbot_notify`**，授权此 App 使用，并添加以下两个变量，两项都勾选 **Secret**：
-
-| 变量 | 内容 |
-| --- | --- |
-| `GROKBOT_WEBHOOK_URL` | Grok Bot routine 的完整 HTTPS webhook URL，不带用户信息或 fragment |
-| `GROKBOT_WEBHOOK_KEY` | webhook 的 Bearer key |
-
-两个工作流都引用该组；只有 TestFlight 继续引用已有的 `jiangjing_release`。组必须先创建：变量组由 Codemagic 在执行脚本前解析，不应依赖不存在的组被忽略；官方文档未承诺这种回退，脚本也不能捕获配置阶段错误。组已存在但任一通知变量未注入、为空（去除 CR/LF 后），或 URL 无效时，通知静默跳过。详见 [变量组与 Secret 配置](https://docs.codemagic.io/yaml-basic-configuration/configuring-environment-variables/)。
-
-实现使用共享的 `scripts/notify-grokbot.sh` 和每个工作流唯一的 `publishing.scripts`。Codemagic [post-publish 文档](https://docs.codemagic.io/yaml-publishing/post-publish/) 说明该脚本在构建失败后也会执行，但取消或超时会跳过，因此不会发送 `canceled`，也不能保证每次运行都有回调。模拟器仍不签名、不上传；它的 publishing 部分只发送通知。
-
-最后一个普通脚本尽力创建 `$HOME/codemagic-success-$CM_BUILD_ID`（build ID 必须非空），通知只检查当前 build 的标记。标记创建失败不改变构建结果；没有标记保守地视为未确认普通脚本成功。状态约定如下：
-
-| 工作流 | `status` | 含义 |
-| --- | --- | --- |
-| `ios-simulator` | `success` / `failed` | 当前 build 标记存在 / 不存在，仅表示普通脚本是否完成 |
-| `ios-testflight` | 固定 `finished` | 通知钩子已运行；**不表示上传成功或失败**。额外的 `script_marker: present/absent` 也只是普通脚本完成提示 |
-
-CI 不添加 Codemagic API token，也不查询 Codemagic API。接收端收到 TestFlight 通知后自行查询真实上传结果；钩子执行时最终状态也可能尚未就绪，需要由接收端处理。
-
-JSON 包含 `source: codemagic`、`app: jiangjing-ios`、`workflow`、`build_id`、`app_id`、`build_url`（`https://codemagic.io/app/<app_id>/build/<build_id>`）、`status`、`branch`、`commit`、`timestamp`（发送时的 UTC ISO-8601 时间），TestFlight 另有上述 `script_marker`。ID、分支和提交来自 [Codemagic 内置变量](https://docs.codemagic.io/yaml-basic-configuration/environment-variables/)；YAML 不使用仅 Workflow Editor 提供的 `CM_BUILD_STEP_STATUS`。
-
-请求使用 `Authorization: Bearer …` 和 `Content-Type: application/json`。脚本先关闭 tracing，清除 URL/key 中所有 CR/LF，用权限 600 的系统临时文件传给 curl 并清理，不输出 URL、key 或响应。curl 仅允许 HTTPS、不跟随重定向，连接限时 3 秒、单次请求 8 秒、最多重试 2 次，重试窗口 18 秒，进程总限时 30 秒；同一次通知复用完全相同的 JSON。行为依据 [curl 文档](https://curl.se/docs/manpage.html)。通知失败、缺工具或序列化异常都静默返回 0，外层另有 `|| true`，不改变原构建结果。接收端按 **build ID + workflow** 去重，因为重试可能重复投递。
-
-检查不安装包或 gem，CI 不执行 pip。`scripts/check-repository.py` 优先使用已有的 PyYAML；仅在无法导入时通过 Ruby 的 YAML（Psych）`safe_load`（禁用 aliases、symbols 和对象类型，递归限制类型并拒绝非有限数值）转成 JSON，继续运行全部结构断言及工作流 `bash -n`。回退先建立子进程环境，再用其中的 PATH 查找 Ruby；路径转换为绝对路径但不解析 symlink，同一次回退的 require 探测及文档转换复用该路径，以保留 shim 行为。未找到可执行文件或探测返回 69（缺少 YAML/JSON）属于后端不可用；选中后无法启动（包括文件消失）属于处理失败。若两个后端均不可用，只允许本地跳过并打印一行提示；环境中只要存在 `CI` 或 `CM_BUILD_ID`（包括空值），就必须失败。文档/转换错误、超时及意外子进程失败在本地也必须失败。
-
-Ruby 子进程只接收父进程 PATH（仅缺失时用 `os.defpath`）、非空且为绝对路径的 HOME，以及值标识 UTF-8 的非空 LANG、LC_ALL、LC_CTYPE；不强制设置 `en_US.UTF-8`。依据 [rbenv 手册](https://rbenv.org/man/rbenv.1)，版本切换使用 PATH 中的 shims，默认根目录为 `~/.rbenv`，因此保留 HOME 支持默认配置。这也允许 Ruby 访问用户配置，是有意的兼容性取舍。[RubyGems 环境变量文档](https://guides.rubygems.org/environment-variables/)说明这些变量只是可选的默认值覆盖；当前没有证据需要它们，因此不继承 GEM_*、RBENV_*、BUNDLE_*、RUBYOPT、RUBYLIB、RUBYGEMS_GEMDEPS、BASH_ENV、ENV、任何 GROKBOT_*、凭据或发布变量。没有添加 `--disable-gems`。
-
-两次 Ruby 调用均捕获字节输出并限时 10 秒，文档通过 stdin 以 UTF-8 传入，成功的 JSON stdout 严格按 UTF-8 解码。失败诊断包含阶段、选中的 Ruby 路径、退出码或超时/启动错误类别。只有不接收文档的 require 探测可以输出 stderr（包括 LoadError 消息），无效 UTF-8 用替换字符显示；最多前三行，控制字符转义，整条诊断最多 1 KiB。输出在截断前遮盖父环境中 GROKBOT_* 和名称含凭据标识的变量值（包括短 webhook 密钥）；不打印环境清单或原始异常。转换失败和超时仅输出元数据，绝不输出 stdout、stderr、文档或解析异常细节。
-
-[Codemagic Xcode 26.6 规格](https://docs.codemagic.io/specs-macos/xcode-26-6/)列出预装 Ruby **4.0.5** 和 gem **4.0.14**，但不证明此检查实际选择了哪个 Ruby，也不证明 PyYAML 缺失。[Psych 文档](https://docs.ruby-lang.org/en/4.0/Psych.html#method-c-safe_load)说明 `safe_load`，实现保留 `parse_symbols: false` 等现有参数。构建 `6aea776a9f0a1b467e57c470` 的 `Ruby startup failure` 只定位到探测阶段，不能证明 Ruby 已启动，根因仍未验证。本次改动改善兼容性及诊断；HOME 是否足够、Psych 参数兼容性仍需同一 Xcode 26.6 镜像运行两个仓库 YAML 和完整 Python 测试（含真实 Ruby 测试）确认。本地当前没有 Ruby，不为此次改动安装 Ruby：可执行替身及 mock 测试覆盖回退与完整结构检查，真实 Ruby 等价性（含 YES/NO、版本字符串、整数及块文本的值和类型）和拒绝用例在后端可用时运行，否则明确跳过。等价性限于当前两个无 aliases/日期的仓库文档，不承诺任意 YAML 的相同行为。
-
-```bash
-python3 -B scripts/check-repository.py
-python3 -B -m unittest discover -s Tests -p 'test_*.py' -v
-python3 -B -S -m unittest discover -s Tests -p 'test_*.py' -v
-# -S 仅在本地模拟无 PyYAML；Ruby 可用时仍执行完整 YAML 检查
-env -u CI -u CM_BUILD_ID python3 -B -S scripts/check-repository.py
-env -u CM_BUILD_ID CI=1 python3 -B -S scripts/check-repository.py
-```
-
-tracing 检查涵盖 `env` / `command` / `exec` 包装、命令替换和所有未引用 heredoc 正文（即便只是打印的文本）；引用或转义 delimiter 的正文保留字面含义，`set +x` 仍允许。此扫描器不递归解释 `bash -c` / `sh -c` 字符串，也不是完整 shell 分析器。
-
-测试用本地 curl 替身，不会触发真实 webhook；它验证完整参数和配置约定，并模拟可重试失败及 HTTPS/HTTP 重定向，不证明真实 curl 的重试或网络隔离。上线仍需在 Codemagic 分别验证成功构建、故意的普通脚本失败、空凭据和 webhook 不可达时的行为；TestFlight 的真实上传结果交由接收端验证。真实发布验证需另行授权。
 
 ## 内测分发说明
 
