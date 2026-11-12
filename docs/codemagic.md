@@ -1,5 +1,7 @@
 # Codemagic → TestFlight
 
+发布准备见 [TestFlight 与 App Store 检查清单](release-checklist.md)及[中英文商店文案](store-copy.md)。清单中的未勾选项目需逐项验收，不代表已经具备分发条件。
+
 仓库根目录的 `codemagic.yaml` 有两个**手动**工作流，没有 push 自动触发。编译检查不得使用会上传的 `ios-testflight`。Xcode 固定为 **26.6**，机器是 `mac_mini_m2`，和 stl2stp 相同。营销版本保持 `1.0.0`；构建号用 Codemagic 的 `PROJECT_BUILD_NUMBER`，不写死在仓库里。
 
 | 工作流 | 名称 | 做什么 | 签名 |
