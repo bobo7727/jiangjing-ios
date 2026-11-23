@@ -290,7 +290,10 @@ def main():
     privacy = plistlib.loads((ROOT / 'JiangJing/PrivacyInfo.xcprivacy').read_bytes())
     assert privacy['NSPrivacyTracking'] is False
     assert privacy['NSPrivacyCollectedDataTypes'] == []
-    print('PASS: Info.plist and privacy manifest parse; permission copy and encryption declaration present')
+    disk = [e for e in privacy['NSPrivacyAccessedAPITypes']
+            if e.get('NSPrivacyAccessedAPIType') == 'NSPrivacyAccessedAPICategoryDiskSpace']
+    assert len(disk) == 1 and disk[0]['NSPrivacyAccessedAPITypeReasons'] == ['85F4.1'], disk
+    print('PASS: Info.plist and privacy manifest (DiskSpace 85F4.1) parse; permission copy and encryption declaration present')
 
     localizations = {}
     for language in ('zh-Hans', 'en'):

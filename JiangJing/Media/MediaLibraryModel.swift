@@ -18,6 +18,7 @@ final class MediaLibraryModel: ObservableObject {
     private var leases = MediaLeases()
     private var saving: Set<UUID> = []
     private var verifying: Set<UUID> = []
+    private var storageRefreshGeneration = 0
 
     convenience init() {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -62,6 +63,8 @@ final class MediaLibraryModel: ObservableObject {
 
     /// Measures files off the main actor; never blocks the UI and never deletes.
     func refreshStorage() async {
+        storageRefreshGeneration += 1
+        let generation = storageRefreshGeneration
         let journal = journal
         let snapshot = records
         let capacity = availableCapacity
@@ -70,6 +73,8 @@ final class MediaLibraryModel: ObservableObject {
             for record in snapshot { sizes[record.id] = journal.diskUsage(of: record) }
             return (sizes, capacity())
         }.value
+        // A newer refresh started meanwhile; never let this older measurement win.
+        guard generation == storageRefreshGeneration else { return }
         let live = Set(records.map(\.id))
         usage = sizes.filter { live.contains($0.key) }
         availableBytes = available

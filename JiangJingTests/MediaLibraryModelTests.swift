@@ -117,8 +117,39 @@ final class MediaLibraryModelTests: XCTestCase {
         XCTAssertNil(library.usage[record.id])
     }
 
+    @MainActor func testOverlappingStorageRefreshPublishesOnlyNewestResult() async throws {
+        let journal = makeJournal()
+        defer { try? FileManager.default.removeItem(at: journal.directory) }
+        let gate = RefreshGate()
+        let library = MediaLibraryModel(journal: journal, isActive: { true },
+                                        availableCapacity: { gate.next() }) { _, _ in }
+        let older = Task { await library.refreshStorage() } // call 1 blocks inside capacity()
+        for _ in 0..<2_000 where !gate.firstStarted { await Task.yield(); try await Task.sleep(nanoseconds: 1_000_000) }
+        XCTAssertTrue(gate.firstStarted, "first refresh never reached the capacity reader")
+        await library.refreshStorage() // call 2 completes first with 2
+        XCTAssertEqual(library.availableBytes, 2)
+        gate.releaseFirst()
+        await older.value // stale result of call 1 (value 1) must be dropped
+        XCTAssertEqual(library.availableBytes, 2)
+    }
+
     private func makeJournal() -> MediaJournal {
         // Test sandbox only; never touches the app's actual media directory.
         MediaJournal(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
     }
+}
+
+/// Test helper: the first capacity read blocks until released and returns 1; later reads return 2.
+private final class RefreshGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let semaphore = DispatchSemaphore(value: 0)
+    private var calls = 0
+    private var started = false
+    var firstStarted: Bool { lock.lock(); defer { lock.unlock() }; return started }
+    func next() -> Int64? {
+        lock.lock(); calls += 1; let call = calls; if call == 1 { started = true }; lock.unlock()
+        if call == 1 { semaphore.wait(); return 1 }
+        return 2
+    }
+    func releaseFirst() { semaphore.signal() }
 }

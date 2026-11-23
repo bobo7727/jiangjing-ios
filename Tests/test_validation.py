@@ -29,12 +29,21 @@ class BuildValidationTests(unittest.TestCase):
         }
         self.write_info()
         (self.app / 'Assets.car').write_bytes(b'test fixture')
-        (self.app / 'PrivacyInfo.xcprivacy').write_bytes(plistlib.dumps({'NSPrivacyTracking': False}))
+        (self.app / 'PrivacyInfo.xcprivacy').write_bytes(plistlib.dumps(self.privacy()))
         for language in ('en', 'zh-Hans', 'zh-Hant'):
             folder = self.app / (language + '.lproj')
             folder.mkdir()
             for name in ('Localizable.strings', 'InfoPlist.strings'):
                 (folder / name).write_text('"fixture" = "fixture";')
+
+    @staticmethod
+    def privacy(reasons=('85F4.1',), declared=True):
+        manifest = {'NSPrivacyTracking': False, 'NSPrivacyAccessedAPITypes': []}
+        if declared:
+            manifest['NSPrivacyAccessedAPITypes'].append({
+                'NSPrivacyAccessedAPIType': 'NSPrivacyAccessedAPICategoryDiskSpace',
+                'NSPrivacyAccessedAPITypeReasons': list(reasons)})
+        return manifest
 
     def write_info(self):
         (self.app / 'Info.plist').write_bytes(plistlib.dumps(self.info))
@@ -49,6 +58,21 @@ class BuildValidationTests(unittest.TestCase):
     def test_missing_privacy_manifest_fails(self):
         (self.app / 'PrivacyInfo.xcprivacy').unlink()
         self.assertNotEqual(self.verify().returncode, 0)
+
+    def test_missing_disk_space_declaration_fails(self):
+        (self.app / 'PrivacyInfo.xcprivacy').write_bytes(plistlib.dumps(self.privacy(declared=False)))
+        self.assertNotEqual(self.verify().returncode, 0)
+
+    def test_wrong_disk_space_reason_fails(self):
+        (self.app / 'PrivacyInfo.xcprivacy').write_bytes(plistlib.dumps(self.privacy(reasons=('E174.1',))))
+        self.assertNotEqual(self.verify().returncode, 0)
+
+    def test_source_manifest_declares_disk_space_reason(self):
+        with (ROOT / 'JiangJing/PrivacyInfo.xcprivacy').open('rb') as stream:
+            manifest = plistlib.load(stream)
+        entries = manifest['NSPrivacyAccessedAPITypes']
+        self.assertEqual([(e['NSPrivacyAccessedAPIType'], e['NSPrivacyAccessedAPITypeReasons']) for e in entries],
+                         [('NSPrivacyAccessedAPICategoryDiskSpace', ['85F4.1'])])
 
     def test_raised_deployment_target_fails(self):
         self.info['MinimumOSVersion'] = '17.0'

@@ -17,6 +17,7 @@ extension SaveState {
 struct MediaLibraryView: View {
     @ObservedObject var library: MediaLibraryModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var discardID: UUID?
     @State private var retryID: UUID?
 
@@ -81,6 +82,10 @@ struct MediaLibraryView: View {
             }
             .task { await library.refreshStorage() }
             .onChange(of: library.records) { _ in Task { await library.refreshStorage() } }
+            // Free space can change while the app is away; re-measure on return.
+            .onChange(of: scenePhase) { phase in
+                if phase == .active { Task { await library.refreshStorage() } }
+            }
             .navigationTitle(L10n.mediaTitle)
             .toolbar { Button(L10n.actionClose) { dismiss() } }
             .confirmationDialog(L10n.mediaDiscardConfirm, isPresented: Binding(
