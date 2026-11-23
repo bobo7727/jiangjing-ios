@@ -59,6 +59,9 @@ def problems():
             for key, value in table.items():
                 if not value.strip():
                     add(f'{name}: {language}/{key} is empty')
+        same = [k for k in reference if tables['zh-Hant'][k] == tables['zh-Hans'][k]]
+        if len(same) > len(reference) // 2:
+            add(f'{name}: zh-Hant is mostly identical to zh-Hans ({len(same)}/{len(reference)}); looks like an unconverted copy')
         for key, value in tables['en'].items():
             if CJK.search(value):
                 add(f'{name}: en/{key} contains CJK text')
