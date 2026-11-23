@@ -71,6 +71,10 @@
 "media.discard" = "丟棄本機副本";
 "media.discardConfirm" = "確定丟棄？未儲存或分享的內容將無法復原。已寫入相簿的內容不會被刪除。";
 "media.duplicateWarning" = "上次儲存可能已經成功。再次儲存可能在相簿中產生重複內容，確定繼續？";
+"media.storage.total" = "本機媒體共佔用 %@。";
+"media.storage.available" = "裝置約有 %@ 可用空間（估算）。";
+"media.size" = "大小：%@";
+"media.lowSpace" = "可用空間不足，拍照或錄影可能儲存失敗。請先儲存或分享需要保留的內容，再丟棄不再需要的本機副本。App 不會自動刪除任何內容。";
 "storage.title" = "本機儲存失敗";
 "storage.body" = "無法完整寫入媒體或復原記錄。請檢查可用空間，儲存或分享保留的內容後重試。App 不會自動刪除未儲存的副本。";
 "share.failed.title" = "暫時無法分享";
