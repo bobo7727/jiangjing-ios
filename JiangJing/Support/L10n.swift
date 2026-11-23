@@ -1,6 +1,6 @@
 import Foundation
 
-/// Keys live in `Localizable.strings`. Chinese is the development language.
+/// Keys live in `Localizable.strings`. English is the development language and the fallback for every unsupported system language; zh-Hans and zh-Hant are shipped alongside it.
 enum L10n {
     static var permTitle: String { String(localized: "perm.title") }
     static var permBody: String { String(localized: "perm.body") }

@@ -13,7 +13,7 @@ assert info['MinimumOSVersion'] == '16.0'
 assert info['ITSAppUsesNonExemptEncryption'] is False
 for key in ('NSCameraUsageDescription', 'NSMicrophoneUsageDescription', 'NSPhotoLibraryAddUsageDescription'):
     assert info[key].strip(), key
-for language in ('en', 'zh-Hans'):
+for language in ('en', 'zh-Hans', 'zh-Hant'):
     for resource in ('Localizable.strings', 'InfoPlist.strings'):
         assert (app / f'{language}.lproj' / resource).is_file(), (language, resource)
 assert (app / 'Assets.car').is_file()
