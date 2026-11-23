@@ -9,6 +9,7 @@ struct MagnifierScreen: View {
     @State private var showHint = true
     @State private var showLibrary = false
     @State private var showPrivacy = false
+    @State private var showSupport = false
 
     var body: some View {
         ZStack {
@@ -33,6 +34,10 @@ struct MagnifierScreen: View {
                 Button { showPrivacy = true } label: {
                     Label(L10n.privacyTitle, systemImage: "hand.raised")
                 }
+                Button { showSupport = true } label: {
+                    Label(L10n.supportTitle, systemImage: "heart")
+                }
+                .accessibilityLabel(L10n.a11ySupport)
             }
             .labelStyle(.iconOnly)
             .font(.title2)
@@ -42,6 +47,7 @@ struct MagnifierScreen: View {
         }
         .sheet(isPresented: $showLibrary) { MediaLibraryView(library: model.media) }
         .sheet(isPresented: $showPrivacy) { PrivacyPolicyView() }
+        .sheet(isPresented: $showSupport) { SupportView() }
         .alert(
             model.alert?.title ?? "",
             isPresented: alertPresented,

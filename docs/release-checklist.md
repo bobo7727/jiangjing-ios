@@ -52,7 +52,7 @@
 ### 出口合规及按需项目
 
 - [ ] 核查最终包及依赖的加密行为与 `ITSAppUsesNonExemptEncryption = false` 一致，即不使用非豁免加密。若 ASC 仍要求补充信息，按实际加密用途逐题回答；不要把该值误读为完全不使用任何加密。[Apple 出口合规说明](https://developer.apple.com/help/app-store-connect/manage-app-information/overview-of-export-compliance/)
-- [ ] 当前无追踪/广告/内购实现，ATT、广告标识符、广告 SDK 合规和恢复购买均标为“不适用”。若以后引入相关功能，再核查 ATT 的实际触发条件、隐私申报、广告内容和内购/恢复流程；不因使用相机就申请 ATT。
+- [ ] 当前无追踪和广告实现，ATT、广告标识符、广告 SDK 合规标为“不适用”。**应用含自愿打赏（消耗型内购，不解锁任何功能）**：按 [内购设置](iap-setup.md) 在 ASC 建好商品并随版本送审；打赏不可恢复，页面已说明。若以后引入 Pro（非消耗型），须同时核查恢复购买入口（付费墙与支持页）。
 
 ### App 图标与打包资源
 

@@ -84,4 +84,17 @@ enum L10n {
     static var privacyTitle: String { String(localized: "privacy.title") }
     static var privacyOnline: String { String(localized: "privacy.online") }
     static var privacyBody: String { String(localized: "privacy.body") }
+
+    static var supportTitle: String { String(localized: "support.title") }
+    static var supportBody: String { String(localized: "support.body") }
+    static var supportTipButton: String { String(localized: "support.tipButton") }
+    static var supportNotRestorable: String { String(localized: "support.notRestorable") }
+    static var supportLoading: String { String(localized: "support.loading") }
+    static var a11ySupport: String { String(localized: "a11y.support") }
+    static var storeNoticeTipThanks: String { String(localized: "store.notice.tipThanks") }
+    static var storeNoticePending: String { String(localized: "store.notice.pending") }
+    static var storeNoticeFailed: String { String(localized: "store.notice.failed") }
+    static var storeNoticeUnverified: String { String(localized: "store.notice.unverified") }
+    static var storeNoticeUnavailable: String { String(localized: "store.notice.unavailable") }
+    static var storeRetry: String { String(localized: "store.retry") }
 }

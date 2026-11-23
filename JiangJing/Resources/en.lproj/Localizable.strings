@@ -81,4 +81,18 @@
 "share.failed.body" = "Close the current dialog and try again. The file is retained in On-device Media.";
 "privacy.title" = "Privacy Policy";
 "privacy.online" = "View Online Policy";
-"privacy.body" = "JiangJing Privacy Policy\nUpdated November 3, 2026\n\nCamera and microphone: The camera provides magnification, photos, and video on your device. The microphone is used only when you enable sound. New recordings have no audio track when sound is off.\n\nPhotos: We request add-only access to save media you capture. The app does not read your photo library.\n\nOn-device media: Capture files and save status remain in private app storage so you can retry after failures, denied access, or interruptions. Closing a result does not delete the file. On-device Media lets you share, retry saving, or explicitly discard copies. Copies remain until discarded or the app is uninstalled. Copies already saved to Photos or shared elsewhere are managed by those apps. Unfinalized movies may not be recoverable.\n\nSharing: Only when you use the system share sheet is the selected media handed to the app or service you choose. Its subsequent handling is governed by that service’s policy.\n\nThe app requires no account, includes no advertising, tracking, or analytics SDKs, and does not upload photos, video, audio, or usage records to the developer. Photos, iCloud, and sharing services may sync according to system and service settings. You can change camera, microphone, and Photos permissions in Settings.";
+"privacy.body" = "JiangJing Privacy Policy\nUpdated November 23, 2026\n\nCamera and microphone: The camera provides magnification, photos, and video on your device. The microphone is used only when you enable sound. New recordings have no audio track when sound is off.\n\nPhotos: We request add-only access to save media you capture. The app does not read your photo library.\n\nOn-device media: Capture files and save status remain in private app storage so you can retry after failures, denied access, or interruptions. Closing a result does not delete the file. On-device Media lets you share, retry saving, or explicitly discard copies. Copies remain until discarded or the app is uninstalled. Copies already saved to Photos or shared elsewhere are managed by those apps. Unfinalized movies may not be recoverable.\n\nSharing: Only when you use the system share sheet is the selected media handed to the app or service you choose. Its subsequent handling is governed by that service’s policy.\n\nTips: A tip is a one-time in-app purchase processed by Apple through the App Store. The app does not collect or receive your payment details or Apple ID, and a tip unlocks nothing.\n\nThe app requires no account, includes no advertising, tracking, or analytics SDKs, and does not upload photos, video, audio, or usage records to the developer. Photos, iCloud, and sharing services may sync according to system and service settings. You can change camera, microphone, and Photos permissions in Settings.";
+
+/* Support and purchases */
+"support.title" = "Support JiangJing";
+"support.body" = "JiangJing is free to use. If it helps your work, you can leave a tip. A tip is one-time, can be repeated, unlocks nothing and changes nothing in the app.";
+"support.tipButton" = "Tip %@";
+"support.notRestorable" = "Tips are one-time and cannot be restored.";
+"support.loading" = "Loading the store…";
+"a11y.support" = "Support the developer";
+"store.notice.tipThanks" = "Thank you for the support.";
+"store.notice.pending" = "Waiting for approval (Ask to Buy).";
+"store.notice.failed" = "The purchase did not go through. Please try again later.";
+"store.notice.unverified" = "Apple could not verify this purchase. Nothing was unlocked.";
+"store.notice.unavailable" = "The store is unavailable right now. Try again later.";
+"store.retry" = "Retry";
