@@ -99,6 +99,24 @@ final class MediaLibraryModelTests: XCTestCase {
         XCTAssertEqual(library.record(record.id)?.saveState, .saved)
     }
 
+    @MainActor func testStorageRefreshReportsSizesLowSpaceAndNeverDeletes() async throws {
+        let journal = makeJournal()
+        defer { try? FileManager.default.removeItem(at: journal.directory) }
+        let library = MediaLibraryModel(journal: journal, isActive: { true }, availableCapacity: { 10 }) { _, _ in }
+        let record = try library.reserve(.photo)
+        try Data(repeating: 1, count: 2_048).write(to: library.url(for: record))
+        library.finish(record.id, complete: true)
+        await library.refreshStorage()
+        XCTAssertGreaterThanOrEqual(library.usage[record.id] ?? 0, 2_048)
+        XCTAssertEqual(library.totalUsage, library.usage[record.id])
+        XCTAssertEqual(library.availableBytes, 10)
+        XCTAssertTrue(library.isLowSpace)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: library.url(for: record).path))
+        library.discard(record.id)
+        await library.refreshStorage()
+        XCTAssertNil(library.usage[record.id])
+    }
+
     private func makeJournal() -> MediaJournal {
         // Test sandbox only; never touches the app's actual media directory.
         MediaJournal(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))

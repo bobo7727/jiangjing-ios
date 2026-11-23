@@ -67,6 +67,34 @@ struct MediaJournal: Sendable {
     func remove(_ record: MediaRecord) throws {
         try FileManager.default.removeItem(at: url(for: record).deletingLastPathComponent())
     }
+
+    /// Bytes this record's retained folder (media + sidecar) occupies. Missing
+    /// or unreadable entries count as 0; this is display-only and never throws.
+    func diskUsage(of record: MediaRecord) -> Int64 {
+        let folder = url(for: record).deletingLastPathComponent()
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return 0 }
+        return names.reduce(Int64(0)) { total, name in
+            let path = folder.appendingPathComponent(name).path
+            let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? NSNumber
+            return total + (size?.int64Value ?? 0)
+        }
+    }
+}
+
+/// Display-only local storage facts. Nothing here ever deletes or evicts media.
+enum StorageSpace {
+    /// Below this much free space, saving a photo or video may fail.
+    static let lowSpaceThreshold: Int64 = 500 * 1_000_000
+
+    /// An unknown capacity (nil) is never reported as low, to avoid a false warning.
+    static func isLow(available: Int64?) -> Bool {
+        guard let available else { return false }
+        return available < lowSpaceThreshold
+    }
+
+    static func total(_ usage: [UUID: Int64]) -> Int64 {
+        usage.values.reduce(0, +)
+    }
 }
 
 /// Saving/sharing/recording holds a lease, including while the UI is dismissed.

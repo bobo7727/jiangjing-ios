@@ -71,6 +71,10 @@
 "media.discard" = "Discard Local Copy";
 "media.discardConfirm" = "Discard this local copy? Unsaved media cannot be recovered. Copies already in Photos will remain.";
 "media.duplicateWarning" = "The previous save may have succeeded. Saving again may create a duplicate in Photos. Continue?";
+"media.storage.total" = "Local media uses %@.";
+"media.storage.available" = "About %@ free on this device (estimate).";
+"media.size" = "Size: %@";
+"media.lowSpace" = "Free space is low, so saving photos or video may fail. Save or share what you want to keep, then discard local copies you no longer need. Nothing is deleted automatically.";
 "storage.title" = "Local Storage Failed";
 "storage.body" = "Media or its recovery record could not be written. Check free space, save or share retained media, then try again. Unsaved copies are never automatically deleted.";
 "share.failed.title" = "Cannot Share Yet";

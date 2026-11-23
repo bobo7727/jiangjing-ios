@@ -22,3 +22,8 @@ Package.resolved
 .env
 *.mobileprovision
 *.p12
+
+# BEGIN dual-agent-review
+# Local plans, handoffs, test logs, and escalation notes for every feature.
+/.agents/work/
+# END dual-agent-review
