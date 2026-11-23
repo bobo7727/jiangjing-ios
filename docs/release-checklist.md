@@ -43,7 +43,7 @@
 | --- | --- | --- | --- |
 | `NSCameraUsageDescription` | 需要使用相机，把屏幕当成放大镜，看清细小零件，并拍下照片和视频。 | The camera is used as a magnifier so you can see fine detail and capture photos and video. | 首次点击“允许使用相机”后请求相机授权 |
 | `NSMicrophoneUsageDescription` | 打开录像声音时，需要使用麦克风收录环境声。 | The microphone is used only when you turn on sound for a video recording. | 用户开启录像声音时请求；默认关闭 |
-| `NSPhotoLibraryAddUsageDescription` | 需要把放大后的照片和视频保存到相册，方便发给客户或朋友。 | Photos and videos of the magnified view are saved to your library so you can send them to customers or friends. | 首次保存采集内容到相册时请求；首次授权延后至前台 |
+| `NSPhotoLibraryAddUsageDescription` | 需要把你拍摄的照片和视频（包括加了标签的照片副本）保存到相册，方便发给客户或朋友。 | Photos and videos you capture, including labeled copies of photos, are saved to your library so you can send them to customers or friends. | 首次保存采集内容到相册时请求；首次授权延后至前台 |
 
 - [ ] 在中英文真机上核对弹窗实际文本、触发时机和拒绝后的提示/设置入口。
 - [ ] 确认相册仍使用 [PhotoLibrarySaver](../JiangJing/Media/PhotoLibrarySaver.swift) 的 `.addOnly`，无需读取整个相册；保存被拒绝后仍能保留本机文件并主动分享/重试。

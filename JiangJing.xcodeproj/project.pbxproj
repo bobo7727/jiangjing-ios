@@ -91,6 +91,13 @@
 		FB18A60842EC617189FDA6BF /* LabelLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = E676720F18D0D8977843B50A; };
 		20FFA050A33372348F5EA2DE /* SupportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6A4A4E8BE4F684E4C731DF; };
 		BA64043A223D67FA94840137 /* StoreManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 701FD235A541B14BDEE63E7D; };
+		EB438E2319CC24B9B253A93D /* LabelPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81D45EC3997C60B6987CB69; };
+		31724C64067A1993D7F8FDAD /* LabelRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BFF642CA18B6CD1BB5FCAB3; };
+		A673E270DFC1A0CA3A5833DA /* LabelExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45032CE23CA4DE819553044B; };
+		CC5681A0B92F9F8770C2F921 /* ProPaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A654568CC04B55C8E5F4FA7; };
+		31D603D8EF8A36E80AA0177B /* LabelEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A712A5AB1D098DB29FB8A98E; };
+		CA27299C8CADA328E1E552E5 /* MockStoreBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00D10C14DE56646A00DB6A; };
+		C0B84BB6A77CF5CC285CF239 /* LabelExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47521B2F7F866373405AC964; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -256,6 +263,13 @@
 		E676720F18D0D8977843B50A /* LabelLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelLayout.swift; sourceTree = "<group>"; };
 		1A6A4A4E8BE4F684E4C731DF /* SupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportView.swift; sourceTree = "<group>"; };
 		701FD235A541B14BDEE63E7D /* StoreManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManagerTests.swift; sourceTree = "<group>"; };
+		B81D45EC3997C60B6987CB69 /* LabelPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelPreferences.swift; sourceTree = "<group>"; };
+		7BFF642CA18B6CD1BB5FCAB3 /* LabelRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelRenderer.swift; sourceTree = "<group>"; };
+		45032CE23CA4DE819553044B /* LabelExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelExporter.swift; sourceTree = "<group>"; };
+		1A654568CC04B55C8E5F4FA7 /* ProPaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProPaywallView.swift; sourceTree = "<group>"; };
+		A712A5AB1D098DB29FB8A98E /* LabelEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelEditorView.swift; sourceTree = "<group>"; };
+		AC00D10C14DE56646A00DB6A /* MockStoreBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockStoreBackend.swift; sourceTree = "<group>"; };
+		47521B2F7F866373405AC964 /* LabelExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelExporterTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -301,6 +315,8 @@
 				4ECC15DFDB059B66D369FB84 /* MagnifierScreen.swift */,
 				22223962E4EC05C1C63C16FB /* ShareSheet.swift */,
 				1A6A4A4E8BE4F684E4C731DF /* SupportView.swift */,
+				1A654568CC04B55C8E5F4FA7 /* ProPaywallView.swift */,
+				A712A5AB1D098DB29FB8A98E /* LabelEditorView.swift */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -378,7 +394,7 @@
 			);
 			sourceTree = "<group>";
 		};
-		7EAC671F316862D2C71DCBA1 = {isa = PBXGroup; children = (BA76EDB0E46A62EEAAC441E7, 90AF9977320BAC395F6102D7,701FD235A541B14BDEE63E7D,); path = JiangJingTests; sourceTree = "<group>"; };
+		7EAC671F316862D2C71DCBA1 = {isa = PBXGroup; children = (BA76EDB0E46A62EEAAC441E7, 90AF9977320BAC395F6102D7,701FD235A541B14BDEE63E7D,AC00D10C14DE56646A00DB6A,47521B2F7F866373405AC964,); path = JiangJingTests; sourceTree = "<group>"; };
 		36EC63BCFE3384BCD3738D17 /* Store */ = {
 			isa = PBXGroup;
 			children = (
@@ -387,6 +403,9 @@
 				32834EF6D85409B02ADC0CAA /* StoreBackend.swift */,
 				805912C6D4D74F0A0F0D0F5D /* StoreManager.swift */,
 				E676720F18D0D8977843B50A /* LabelLayout.swift */,
+				B81D45EC3997C60B6987CB69 /* LabelPreferences.swift */,
+				7BFF642CA18B6CD1BB5FCAB3 /* LabelRenderer.swift */,
+				45032CE23CA4DE819553044B /* LabelExporter.swift */,
 			);
 			path = Store;
 			sourceTree = "<group>";
@@ -511,10 +530,15 @@
 				FB1F6F6E117EB513AD86080F /* StoreManager.swift in Sources */,
 				FB18A60842EC617189FDA6BF /* LabelLayout.swift in Sources */,
 				20FFA050A33372348F5EA2DE /* SupportView.swift in Sources */,
+				EB438E2319CC24B9B253A93D /* LabelPreferences.swift in Sources */,
+				31724C64067A1993D7F8FDAD /* LabelRenderer.swift in Sources */,
+				A673E270DFC1A0CA3A5833DA /* LabelExporter.swift in Sources */,
+				CC5681A0B92F9F8770C2F921 /* ProPaywallView.swift in Sources */,
+				31D603D8EF8A36E80AA0177B /* LabelEditorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		23D07F87414AE765699DFA62 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B2FFE7492719201A07C737B1, 742CDA2990CBF5B7C3799965,BA64043A223D67FA94840137,); runOnlyForDeploymentPostprocessing = 0; };
+		23D07F87414AE765699DFA62 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B2FFE7492719201A07C737B1, 742CDA2990CBF5B7C3799965,BA64043A223D67FA94840137,CA27299C8CADA328E1E552E5,C0B84BB6A77CF5CC285CF239,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXVariantGroup section */

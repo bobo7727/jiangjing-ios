@@ -10,6 +10,7 @@ struct MagnifierScreen: View {
     @State private var showLibrary = false
     @State private var showPrivacy = false
     @State private var showSupport = false
+    @State private var labelPhoto: FrozenPhoto?
 
     var body: some View {
         ZStack {
@@ -48,6 +49,16 @@ struct MagnifierScreen: View {
         .sheet(isPresented: $showLibrary) { MediaLibraryView(library: model.media) }
         .sheet(isPresented: $showPrivacy) { PrivacyPolicyView() }
         .sheet(isPresented: $showSupport) { SupportView() }
+        .sheet(item: $labelPhoto) { photo in
+            LabelEditorView(photo: photo, media: model.media) { id in
+                labelPhoto = nil
+                // The share sheet needs the editor sheet to be gone first.
+                Task {
+                    try? await Task.sleep(nanoseconds: 700_000_000)
+                    model.media.share(id)
+                }
+            }
+        }
         .alert(
             model.alert?.title ?? "",
             isPresented: alertPresented,
@@ -206,7 +217,8 @@ struct MagnifierScreen: View {
                     library: model.media,
                     onShare: { model.media.share(photo.id) },
                     onContinue: { model.dismissFreeze() },
-                    onSettings: openSettings
+                    onSettings: openSettings,
+                    onLabel: { labelPhoto = photo }
                 )
             } else {
                 ControlBar(model: model)

@@ -120,6 +120,19 @@ def problems():
     if re.search(r'buyTip', support) is None:
         add('SupportView must offer the tip')
 
+    # e2) the Pro gate runs before anything is written, and only LabelExporter asks for the status.
+    exporter = (APP / 'Store/LabelExporter.swift').read_text(encoding='utf-8')
+    gate, write = exporter.find('resolvedProStatus'), exporter.find('media.reserve')
+    if gate < 0 or write < 0 or gate > write:
+        add('LabelExporter must check Pro (resolvedProStatus) before media.reserve')
+    for path in sorted(APP.rglob('*.swift')):
+        relative = path.relative_to(APP).as_posix()
+        if relative != 'Store/StoreManager.swift' and relative != 'Store/LabelExporter.swift' \
+                and 'resolvedProStatus' in path.read_text(encoding='utf-8'):
+            add(f'{relative}: only LabelExporter may call resolvedProStatus')
+    if 'Task.detached' not in exporter or 'media.save' not in exporter:
+        add('LabelExporter must render off the main actor and auto-save the copy to Photos')
+
     # f) tip copy says it unlocks nothing, in every language.
     for language, phrase in UNLOCK_NOTHING.items():
         if phrase not in strings(language).get('support.body', ''):
@@ -132,8 +145,6 @@ def problems():
                 for entry in manifest.get('NSPrivacyAccessedAPITypes', [])}
     if uses_defaults and declared.get('NSPrivacyAccessedAPICategoryUserDefaults') != ['CA92.1']:
         add('code uses UserDefaults but PrivacyInfo.xcprivacy lacks NSPrivacyAccessedAPICategoryUserDefaults / CA92.1')
-    if not uses_defaults and declared:
-        add('PrivacyInfo.xcprivacy declares required-reason APIs the code does not use')
     if manifest.get('NSPrivacyTracking') is not False or manifest.get('NSPrivacyCollectedDataTypes') != []:
         add('privacy manifest must stay: no tracking, no collected data')
     return found

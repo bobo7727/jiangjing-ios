@@ -8,7 +8,9 @@ extension StoreManager.Notice {
         case .failed: return L10n.storeNoticeFailed
         case .unverified: return L10n.storeNoticeUnverified
         case .unavailable: return L10n.storeNoticeUnavailable
-        case .restoreNone, .restored, .proUnlocked: return ""
+        case .restoreNone: return L10n.storeNoticeRestoreNone
+        case .restored: return L10n.storeNoticeRestored
+        case .proUnlocked: return L10n.storeNoticeProUnlocked
         }
     }
 }
@@ -23,6 +25,8 @@ struct SupportView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    proSection
+                    Divider()
                     Text(L10n.supportBody)
                     tipSection
                     if let notice = store.notice, !notice.text.isEmpty {
@@ -40,8 +44,17 @@ struct SupportView: View {
             .navigationTitle(L10n.supportTitle)
             .toolbar { Button(L10n.actionClose) { dismiss() } }
         }
+        .onAppear { store.notice = nil }
         .task {
             if store.loadState == .idle || store.loadState == .unavailable { await store.loadProducts() }
+        }
+    }
+
+    private var proSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.supportProTitle).font(.system(.title3, design: .rounded).weight(.bold))
+            Text(L10n.supportProBody)
+            ProPurchaseSection(showsNotice: false)
         }
     }
 

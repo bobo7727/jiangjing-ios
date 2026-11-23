@@ -1,48 +1,6 @@
 import XCTest
 @testable import JiangJing
 
-/// Scriptable StoreKit stand-in. All state is guarded by a lock so it can be `Sendable`.
-private final class MockBackend: StoreBackend, @unchecked Sendable {
-    private let lock = NSLock()
-    private var _purchase: [String: PurchaseOutcome] = [:]
-    private var _entitlements: EntitlementQuery = .completed([])
-    private var _entitlementDelay: UInt64 = 0
-    private var _products: [ProductInfo] = []
-    private var _loadFails = false
-    private var _syncFails = false
-    private var continuation: AsyncStream<StoreEvent>.Continuation?
-    private(set) var purchaseCalls: [String] = []
-
-    func set(purchase id: String, _ outcome: PurchaseOutcome) { lock.withLock { _purchase[id] = outcome } }
-    func set(entitlements: EntitlementQuery, delayMilliseconds: UInt64 = 0) {
-        lock.withLock { _entitlements = entitlements; _entitlementDelay = delayMilliseconds }
-    }
-    func set(products: [ProductInfo]) { lock.withLock { _products = products } }
-    func set(loadFails: Bool) { lock.withLock { _loadFails = loadFails } }
-    func set(syncFails: Bool) { lock.withLock { _syncFails = syncFails } }
-    func push(_ event: StoreEvent) { _ = lock.withLock { continuation }?.yield(event) }
-
-    func loadProducts(ids: Set<String>) async throws -> [ProductInfo] {
-        let (fails, list) = lock.withLock { (_loadFails, _products) }
-        if fails { throw URLError(.notConnectedToInternet) }
-        return list.filter { ids.contains($0.id) }
-    }
-    func purchase(id: String) async -> PurchaseOutcome {
-        lock.withLock { purchaseCalls.append(id); return _purchase[id] ?? .failed }
-    }
-    func currentEntitlements() async -> EntitlementQuery {
-        let (query, delay) = lock.withLock { (_entitlements, _entitlementDelay) }
-        if delay > 0 { try? await Task.sleep(nanoseconds: delay * 1_000_000) }
-        return query
-    }
-    func sync() async throws {
-        if lock.withLock({ _syncFails }) { throw URLError(.userAuthenticationRequired) }
-    }
-    func events() -> AsyncStream<StoreEvent> {
-        AsyncStream { continuation in lock.withLock { self.continuation = continuation } }
-    }
-}
-
 @MainActor
 final class StoreManagerTests: XCTestCase {
     private let bundle = "com.jiangjing.magnifier"
@@ -53,12 +11,12 @@ final class StoreManagerTests: XCTestCase {
         Entitlement(productID: StoreCatalog.proID, bundleID: bundle, isVerified: verified, isRevoked: false)
     }
 
-    private func makeManager(_ backend: MockBackend) -> StoreManager {
+    private func makeManager(_ backend: MockStoreBackend) -> StoreManager {
         StoreManager(backend: backend, bundleID: bundle)
     }
 
     func testTipSuccessThanksAndNeverTouchesPro() async {
-        let backend = MockBackend()
+        let backend = MockStoreBackend()
         backend.set(purchase: StoreCatalog.tipSmallID, .success)
         let store = makeManager(backend)
         await store.buyTip()
@@ -73,7 +31,7 @@ final class StoreManagerTests: XCTestCase {
             (.failed, .failed), (.unavailable, .unavailable)
         ]
         for (outcome, expected) in cases {
-            let backend = MockBackend()
+            let backend = MockStoreBackend()
             backend.set(purchase: StoreCatalog.tipSmallID, outcome)
             let store = makeManager(backend)
             await store.buyTip()
@@ -83,7 +41,7 @@ final class StoreManagerTests: XCTestCase {
     }
 
     func testProPurchaseUnlocks() async {
-        let backend = MockBackend()
+        let backend = MockStoreBackend()
         backend.set(purchase: StoreCatalog.proID, .success)
         let store = makeManager(backend)
         await store.buyPro()
@@ -92,7 +50,7 @@ final class StoreManagerTests: XCTestCase {
     }
 
     func testPendingProPurchaseDoesNotUnlock() async {
-        let backend = MockBackend()
+        let backend = MockStoreBackend()
         backend.set(purchase: StoreCatalog.proID, .pending)
         let store = makeManager(backend)
         await store.buyPro()
@@ -101,20 +59,20 @@ final class StoreManagerTests: XCTestCase {
     }
 
     func testLaunchEntitlementUnlocksOrLocks() async {
-        let owned = MockBackend()
+        let owned = MockStoreBackend()
         owned.set(entitlements: .completed([proEntitlement()]))
         let ownedStore = makeManager(owned)
         await ownedStore.refreshEntitlements()
         XCTAssertEqual(ownedStore.proStatus, .unlocked)
 
-        let free = MockBackend()
+        let free = MockStoreBackend()
         let freeStore = makeManager(free)
         await freeStore.refreshEntitlements()
         XCTAssertEqual(freeStore.proStatus, .locked)
     }
 
     func testSlowLookupStaysUnknownThenUnlocksPurchasedCustomerLate() async {
-        let backend = MockBackend()
+        let backend = MockStoreBackend()
         backend.set(entitlements: .completed([proEntitlement()]), delayMilliseconds: 600)
         let store = makeManager(backend)
         let status = await store.resolvedProStatus(timeout: 0.2)
@@ -124,7 +82,7 @@ final class StoreManagerTests: XCTestCase {
     }
 
     func testUnverifiedOnlyResultStaysUnknown() async {
-        let backend = MockBackend()
+        let backend = MockStoreBackend()
         backend.set(entitlements: .completed([proEntitlement(verified: false)]))
         let store = makeManager(backend)
         await store.refreshEntitlements()
@@ -132,20 +90,20 @@ final class StoreManagerTests: XCTestCase {
     }
 
     func testRestoreFindsPurchaseOrReportsNone() async {
-        let owned = MockBackend()
+        let owned = MockStoreBackend()
         owned.set(entitlements: .completed([proEntitlement()]))
         let ownedStore = makeManager(owned)
         await ownedStore.restore()
         XCTAssertEqual(ownedStore.proStatus, .unlocked)
         XCTAssertEqual(ownedStore.notice, .restored)
 
-        let free = MockBackend()
+        let free = MockStoreBackend()
         let freeStore = makeManager(free)
         await freeStore.restore()
         XCTAssertEqual(freeStore.proStatus, .locked)
         XCTAssertEqual(freeStore.notice, .restoreNone)
 
-        let failing = MockBackend()
+        let failing = MockStoreBackend()
         failing.set(syncFails: true)
         let failingStore = makeManager(failing)
         await failingStore.restore()
@@ -154,7 +112,7 @@ final class StoreManagerTests: XCTestCase {
     }
 
     func testBackgroundEventsApproveRefundAndThank() async {
-        let backend = MockBackend()
+        let backend = MockStoreBackend()
         let store = makeManager(backend)
         store.begin()
         try? await Task.sleep(nanoseconds: 200_000_000)
@@ -171,7 +129,7 @@ final class StoreManagerTests: XCTestCase {
     }
 
     func testProductLoadingStatesAndPrices() async {
-        let backend = MockBackend()
+        let backend = MockStoreBackend()
         backend.set(products: [tip, proInfo])
         let store = makeManager(backend)
         await store.loadProducts()
@@ -179,14 +137,14 @@ final class StoreManagerTests: XCTestCase {
         XCTAssertEqual(store.tipProduct?.displayPrice, "$0.99")
         XCTAssertEqual(store.proProduct?.displayPrice, "$2.99")
 
-        let failing = MockBackend()
+        let failing = MockStoreBackend()
         failing.set(loadFails: true)
         let failingStore = makeManager(failing)
         await failingStore.loadProducts()
         XCTAssertEqual(failingStore.loadState, .unavailable)
         XCTAssertNil(failingStore.tipProduct)
 
-        let empty = MockBackend()
+        let empty = MockStoreBackend()
         let emptyStore = makeManager(empty)
         await emptyStore.loadProducts()
         XCTAssertEqual(emptyStore.loadState, .unavailable)

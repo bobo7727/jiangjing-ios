@@ -116,4 +116,26 @@ final class StoreStateTests: XCTestCase {
         XCTAssertEqual(small.originX(position: .bottomRight, imageWidth: 600, boxWidth: 9999), small.margin)
         XCTAssertEqual(small.originY(imageHeight: 800, boxHeight: 40), 800 - small.margin - 40)
     }
+
+    func testLabelPreferencesRoundTripAndNormalize() {
+        let suite = "label-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(LabelPreferences.load(defaults), LabelStyle())
+        LabelPreferences.save(LabelStyle(name: " Ana\nStudio ", showDate: true, position: .bottomRight), defaults)
+        XCTAssertEqual(LabelPreferences.load(defaults), LabelStyle(name: "Ana Studio", showDate: true, position: .bottomRight))
+        defaults.set("nonsense", forKey: "label.position")
+        XCTAssertEqual(LabelPreferences.load(defaults).position, .bottomLeft)
+    }
+
+    func testStampTextUsesDateOnlyWhenAsked() {
+        let date = Date(timeIntervalSince1970: 1_795_000_000) // fixed instant
+        let locale = Locale(identifier: "en_US")
+        let utc = TimeZone(identifier: "UTC")!
+        XCTAssertEqual(LabelStyle(name: "Ana", showDate: false).stampText(date: date, locale: locale, timeZone: utc), "Ana")
+        let withDate = LabelStyle(name: "Ana", showDate: true).stampText(date: date, locale: locale, timeZone: utc)
+        XCTAssertTrue(withDate.hasPrefix("Ana · "))
+        XCTAssertGreaterThan(withDate.count, 6)
+        XCTAssertEqual(LabelStyle(name: "", showDate: false).stampText(date: date), "")
+    }
 }

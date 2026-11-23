@@ -97,4 +97,30 @@ enum L10n {
     static var storeNoticeUnverified: String { String(localized: "store.notice.unverified") }
     static var storeNoticeUnavailable: String { String(localized: "store.notice.unavailable") }
     static var storeRetry: String { String(localized: "store.retry") }
+
+    static var proTitle: String { String(localized: "pro.title") }
+    static var proBody: String { String(localized: "pro.body") }
+    static var proUnlock: String { String(localized: "pro.unlock") }
+    static var proRestore: String { String(localized: "pro.restore") }
+    static var proNotNow: String { String(localized: "pro.notNow") }
+    static var proStillFree: String { String(localized: "pro.stillFree") }
+    static var proUnlocked: String { String(localized: "pro.unlocked") }
+    static var supportProTitle: String { String(localized: "support.proTitle") }
+    static var supportProBody: String { String(localized: "support.proBody") }
+    static var storeNoticeRestoreNone: String { String(localized: "store.notice.restoreNone") }
+    static var storeNoticeRestored: String { String(localized: "store.notice.restored") }
+    static var storeNoticeProUnlocked: String { String(localized: "store.notice.proUnlocked") }
+    static var labelAdd: String { String(localized: "label.add") }
+    static var labelTitle: String { String(localized: "label.title") }
+    static var labelPlaceholder: String { String(localized: "label.placeholder") }
+    static var labelShowDate: String { String(localized: "label.showDate") }
+    static var labelPosition: String { String(localized: "label.position") }
+    static var labelBottomLeft: String { String(localized: "label.bottomLeft") }
+    static var labelBottomRight: String { String(localized: "label.bottomRight") }
+    static var labelExport: String { String(localized: "label.export") }
+    static var labelOriginalKept: String { String(localized: "label.originalKept") }
+    static var labelChecking: String { String(localized: "label.checking") }
+    static var labelCheckFailed: String { String(localized: "label.checkFailed") }
+    static var labelFailed: String { String(localized: "label.failed") }
+    static var labelPreview: String { String(localized: "label.preview") }
 }
