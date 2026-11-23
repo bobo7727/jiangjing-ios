@@ -30,7 +30,7 @@ class BuildValidationTests(unittest.TestCase):
         self.write_info()
         (self.app / 'Assets.car').write_bytes(b'test fixture')
         (self.app / 'PrivacyInfo.xcprivacy').write_bytes(plistlib.dumps({'NSPrivacyTracking': False}))
-        for language in ('en', 'zh-Hans'):
+        for language in ('en', 'zh-Hans', 'zh-Hant'):
             folder = self.app / (language + '.lproj')
             folder.mkdir()
             for name in ('Localizable.strings', 'InfoPlist.strings'):
