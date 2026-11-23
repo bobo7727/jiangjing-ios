@@ -171,4 +171,17 @@ final class StoreManagerTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 900_000_000)
         XCTAssertEqual(store.proStatus, .locked, "an older owned query must not undo a refund")
     }
+
+    func testOlderSlowQueryCannotRelockAfterNewerRestoreQuery() async {
+        let backend = MockStoreBackend()
+        backend.set(entitlements: .completed([]), delayMilliseconds: 700) // launch query captures this: empty, slow
+        let store = makeManager(backend)
+        store.begin()
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        backend.set(entitlements: .completed([proEntitlement()]), delayMilliseconds: 0) // restore sees Pro at once
+        await store.restore()
+        XCTAssertEqual(store.proStatus, .unlocked)
+        try? await Task.sleep(nanoseconds: 900_000_000) // let the older empty query finish
+        XCTAssertEqual(store.proStatus, .unlocked, "an older query finishing after Restore must not relock Pro")
+    }
 }

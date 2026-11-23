@@ -24,6 +24,9 @@ final class StoreManager: ObservableObject {
     /// Bumped whenever a transaction event or purchase changes Pro state. A query that started before the
     /// bump is stale and must not overwrite the newer result.
     private var entitlementRevision = 0
+    /// Numbers each entitlement query as it starts. Only the most recently started query may apply its result,
+    /// so a slow older query finishing late cannot overwrite a newer one (e.g. launch query vs. Restore).
+    private var latestQuery = 0
     private var started = false
 
     convenience init() {
@@ -57,8 +60,11 @@ final class StoreManager: ObservableObject {
 
     func refreshEntitlements() async {
         let startedAt = entitlementRevision
+        latestQuery += 1
+        let mine = latestQuery
         let query = await backend.currentEntitlements()
         guard startedAt == entitlementRevision else { return } // a newer event/purchase already decided
+        guard mine == latestQuery else { return } // a newer query started after this one and owns the result
         tracker.apply(query)
         proStatus = tracker.status
     }
