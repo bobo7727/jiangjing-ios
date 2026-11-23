@@ -41,6 +41,14 @@ struct LabelEditorView: View {
                     if let message {
                         Text(message).font(.subheadline.weight(.semibold)).foregroundStyle(CraftColor.amber)
                     }
+                    if message == L10n.labelCheckFailed {
+                        HStack(spacing: 12) {
+                            Button(L10n.storeRetry) { Task { await export() } }
+                            Button(L10n.proRestore) { Task { await store.restore() } }
+                        }
+                        .buttonStyle(CraftButtonStyle(prominent: false))
+                        .disabled(exporting || store.busy)
+                    }
                     Button {
                         Task { await export() }
                     } label: {

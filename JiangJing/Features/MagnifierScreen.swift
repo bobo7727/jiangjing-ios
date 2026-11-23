@@ -11,6 +11,7 @@ struct MagnifierScreen: View {
     @State private var showPrivacy = false
     @State private var showSupport = false
     @State private var labelPhoto: FrozenPhoto?
+    @State private var pendingShareID: UUID?
 
     var body: some View {
         ZStack {
@@ -49,14 +50,16 @@ struct MagnifierScreen: View {
         .sheet(isPresented: $showLibrary) { MediaLibraryView(library: model.media) }
         .sheet(isPresented: $showPrivacy) { PrivacyPolicyView() }
         .sheet(isPresented: $showSupport) { SupportView() }
-        .sheet(item: $labelPhoto) { photo in
+        .sheet(item: $labelPhoto, onDismiss: {
+            // Share only after the editor sheet has really gone, so ShareCenter is not rejected mid-transition.
+            if let id = pendingShareID {
+                pendingShareID = nil
+                model.media.share(id)
+            }
+        }) { photo in
             LabelEditorView(photo: photo, media: model.media) { id in
+                pendingShareID = id
                 labelPhoto = nil
-                // The share sheet needs the editor sheet to be gone first.
-                Task {
-                    try? await Task.sleep(nanoseconds: 700_000_000)
-                    model.media.share(id)
-                }
             }
         }
         .alert(

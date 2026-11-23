@@ -149,4 +149,26 @@ final class StoreManagerTests: XCTestCase {
         await emptyStore.loadProducts()
         XCTAssertEqual(emptyStore.loadState, .unavailable)
     }
+
+    func testStaleEmptyQueryCannotRelockAfterApprovalEvent() async {
+        let backend = MockStoreBackend()
+        backend.set(entitlements: .completed([]), delayMilliseconds: 700)
+        let store = makeManager(backend)
+        store.begin()
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        backend.push(.entitlement(proEntitlement()))
+        try? await Task.sleep(nanoseconds: 900_000_000)
+        XCTAssertEqual(store.proStatus, .unlocked, "an older empty query must not relock an approved customer")
+    }
+
+    func testStaleOwnedQueryCannotUndoRefundEvent() async {
+        let backend = MockStoreBackend()
+        backend.set(entitlements: .completed([proEntitlement()]), delayMilliseconds: 700)
+        let store = makeManager(backend)
+        store.begin()
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        backend.push(.entitlement(Entitlement(productID: StoreCatalog.proID, bundleID: bundle, isVerified: true, isRevoked: true)))
+        try? await Task.sleep(nanoseconds: 900_000_000)
+        XCTAssertEqual(store.proStatus, .locked, "an older owned query must not undo a refund")
+    }
 }

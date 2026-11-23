@@ -21,7 +21,9 @@ final class StoreManager: ObservableObject {
     private var tracker: ProTracker
     private let backend: StoreBackend
     private var eventsTask: Task<Void, Never>?
-    private var refreshing = false
+    /// Bumped whenever a transaction event or purchase changes Pro state. A query that started before the
+    /// bump is stale and must not overwrite the newer result.
+    private var entitlementRevision = 0
     private var started = false
 
     convenience init() {
@@ -54,10 +56,10 @@ final class StoreManager: ObservableObject {
     }
 
     func refreshEntitlements() async {
-        guard !refreshing else { return }
-        refreshing = true
-        defer { refreshing = false }
-        tracker.apply(await backend.currentEntitlements())
+        let startedAt = entitlementRevision
+        let query = await backend.currentEntitlements()
+        guard startedAt == entitlementRevision else { return } // a newer event/purchase already decided
+        tracker.apply(query)
         proStatus = tracker.status
     }
 
@@ -95,7 +97,9 @@ final class StoreManager: ObservableObject {
         busy = true
         defer { busy = false }
         let outcome = await backend.purchase(id: StoreCatalog.proID)
+        let before = tracker.status
         tracker.apply(purchase: outcome)
+        if tracker.status != before { entitlementRevision += 1 }
         proStatus = tracker.status
         notice = Self.notice(for: outcome, success: .proUnlocked)
     }
@@ -110,7 +114,6 @@ final class StoreManager: ObservableObject {
             notice = .failed
             return
         }
-        refreshing = false
         await refreshEntitlements()
         notice = proStatus == .unlocked ? .restored : .restoreNone
     }
@@ -118,7 +121,9 @@ final class StoreManager: ObservableObject {
     private func handle(_ event: StoreEvent) {
         switch event {
         case .entitlement(let entitlement):
+            let before = tracker.status
             tracker.apply(update: entitlement)
+            if tracker.status != before { entitlementRevision += 1 }
             proStatus = tracker.status
         case .tipThanks:
             notice = .tipThanks

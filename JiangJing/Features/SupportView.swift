@@ -82,7 +82,11 @@ struct SupportView: View {
                 .buttonStyle(CraftButtonStyle())
                 .disabled(store.busy)
             } else {
-                Text(L10n.storeNoticeUnavailable).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(L10n.storeNoticeUnavailable).foregroundStyle(.secondary)
+                    Button(L10n.storeRetry) { Task { await store.loadProducts() } }
+                        .buttonStyle(CraftButtonStyle(prominent: false))
+                }
             }
         }
     }

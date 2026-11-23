@@ -88,10 +88,14 @@ final class LabelExporterTests: XCTestCase {
 
     func testRendererOutputKeepsPixelSizeAndChangesPixels() throws {
         let size = CGSize(width: 200, height: 100)
-        let base = UIGraphicsImageRenderer(size: size).image { UIColor.white.setFill(); $0.fill(CGRect(origin: .zero, size: size)) }
-        let stamped = LabelRenderer.render(image: base, text: "Ana", position: .bottomLeft)
-        XCTAssertEqual(stamped.size.width * stamped.scale, 200)
-        XCTAssertEqual(stamped.size.height * stamped.scale, 100)
-        XCTAssertNotEqual(stamped.pngData(), LabelRenderer.render(image: base, text: "", position: .bottomLeft).pngData())
+        for scale in [CGFloat(1), 2, 3] {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = scale
+            let base = UIGraphicsImageRenderer(size: size, format: format).image { UIColor.white.setFill(); $0.fill(CGRect(origin: .zero, size: size)) }
+            let stamped = LabelRenderer.render(image: base, text: "Ana", position: .bottomLeft)
+            XCTAssertEqual(stamped.size.width * stamped.scale, base.size.width * base.scale, "scale \(scale)")
+            XCTAssertEqual(stamped.size.height * stamped.scale, base.size.height * base.scale, "scale \(scale)")
+            XCTAssertNotEqual(stamped.pngData(), LabelRenderer.render(image: base, text: "", position: .bottomLeft).pngData())
+        }
     }
 }
