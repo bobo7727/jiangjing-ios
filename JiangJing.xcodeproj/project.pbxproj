@@ -199,6 +199,20 @@
 			path = "en.lproj/InfoPlist.strings";
 			sourceTree = "<group>";
 		};
+		A1B2C3D4E5F60718293A4B5C /* zh-Hant */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.strings;
+			name = "zh-Hant";
+			path = "zh-Hant.lproj/Localizable.strings";
+			sourceTree = "<group>";
+		};
+		B1C2D3E4F5061728394A5B6C /* zh-Hant */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.strings;
+			name = "zh-Hant";
+			path = "zh-Hant.lproj/InfoPlist.strings";
+			sourceTree = "<group>";
+		};
 		BE5A879A48AD150D4131FE70 /* PrivacyInfo.xcprivacy */ = {
 			isa = PBXFileReference;
 			lastKnownFileType = text.plist.xml;
@@ -404,11 +418,12 @@
 			};
 			buildConfigurationList = 623E88025C94CA307387FCB3 /* Build configuration list for PBXProject "JiangJing" */;
 			compatibilityVersion = "Xcode 14.0";
-			developmentRegion = "zh-Hans";
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				"zh-Hans",
 				en,
+				"zh-Hans",
+				"zh-Hant",
 				Base,
 			);
 			mainGroup = CECA40B50B3E070B65D94A5D;
@@ -474,6 +489,7 @@
 			children = (
 				5BA02A47F8A0C57A8D13E2E8 /* zh-Hans */,
 				D1454868808E873375A6C211 /* en */,
+				A1B2C3D4E5F60718293A4B5C /* zh-Hant */,
 			);
 			name = Localizable.strings;
 			sourceTree = "<group>";
@@ -483,6 +499,7 @@
 			children = (
 				7979E811BE35874A3A802873 /* zh-Hans */,
 				08FDC1CD04A221CF5341C4BA /* en */,
+				B1C2D3E4F5061728394A5B6C /* zh-Hant */,
 			);
 			name = InfoPlist.strings;
 			sourceTree = "<group>";

@@ -1,0 +1,80 @@
+/* 匠鏡介面文案（繁體中文）。由簡體中文轉寫，上架前需由母語者校對。 */
+
+"perm.title" = "要用相機當放大鏡";
+"perm.body" = "匠鏡用後置相機把螢幕變成放大鏡，方便看清首飾、線跡和細小零件，也可以拍下來傳給別人。";
+"perm.allow" = "允許使用相機";
+"perm.denied.title" = "相機權限已關閉";
+"perm.denied.body" = "請在系統設定裡允許匠鏡使用相機，才能繼續放大查看。";
+"perm.settings" = "去設定裡開啟";
+
+"camera.starting" = "正在開啟相機…";
+"camera.none.title" = "沒有可用的後置相機";
+"camera.none.body" = "請換一台有後置相機的 iPhone。模擬器沒有相機，需要在真機上執行。";
+"camera.stalled.title" = "相機沒有畫面";
+"camera.stalled.body" = "畫面遲遲沒有出來。可以重試，或檢查相機是否被其他 App 佔用。";
+"camera.retry" = "重試";
+
+"hint.gestures" = "雙指縮放 · 輕點對焦 · 雙擊回到 1×";
+"badge.closeup" = "近攝";
+
+"torch.off" = "燈光";
+"torch.low" = "弱光";
+"torch.medium" = "中等";
+"torch.high" = "強光";
+"torch.unavailable.title" = "手電筒無法使用";
+"torch.unavailable.body" = "這台裝置現在無法開啟閃光燈，可能正在降溫，或沒有手電筒。";
+
+"action.photo" = "拍照";
+"action.record" = "錄影";
+"action.stop" = "停止";
+"action.audio" = "聲音";
+"action.share" = "分享";
+"action.continue" = "繼續看";
+"action.close" = "關閉";
+"action.settings" = "去設定";
+
+"capture.saving" = "正在儲存到相簿…";
+"capture.saved" = "已儲存到相簿";
+"capture.saveDenied" = "沒有相簿權限，仍可以分享";
+"capture.saveFailed" = "沒能儲存到相簿，仍可以分享";
+"capture.notReady.title" = "畫面還沒準備好";
+"capture.notReady.body" = "請等預覽穩定後再拍。";
+
+"record.failed.title" = "錄影沒有成功";
+"record.failed.body" = "請再試一次。如果剛開始就失敗，確認還有足夠的儲存空間。";
+"record.shareHint" = "可以傳給客戶或朋友";
+
+"audio.denied.title" = "沒有麥克風權限";
+"audio.denied.body" = "這次錄影不會收錄聲音。可以在設定裡允許匠鏡使用麥克風。";
+
+"freeze.hint" = "這是剛才放大的畫面";
+
+"a11y.zoom" = "放大倍數";
+"a11y.photo" = "拍攝目前畫面";
+"a11y.record" = "開始錄影";
+"a11y.stop" = "停止錄影";
+"a11y.torch" = "手電筒亮度";
+"a11y.audio.on" = "錄影收錄聲音，已開啟";
+"a11y.audio.off" = "錄影不收錄聲音，已關閉";
+"a11y.share" = "分享";
+"a11y.continue" = "回到即時畫面";
+"a11y.presets" = "快速放大倍數";
+
+/* Retained media and privacy */
+"media.title" = "本機媒體";
+"media.pending" = "已保留，回到前景後儲存到相簿。";
+"media.uncertain" = "上次儲存結果未知，請先檢查相簿。";
+"media.retention" = "關閉照片或影片只會隱藏畫面。本機副本會保留至你明確丟棄或移除 App；儲存失敗不會自動刪除。請及時儲存或分享，並自行清理已儲存的副本。";
+"media.incomplete" = "擷取未完成或檔案尚未核驗。可以重新核驗；未封裝完成的影片可能無法復原。";
+"media.retry" = "重試儲存";
+"media.verify" = "核驗檔案";
+"media.discard" = "丟棄本機副本";
+"media.discardConfirm" = "確定丟棄？未儲存或分享的內容將無法復原。已寫入相簿的內容不會被刪除。";
+"media.duplicateWarning" = "上次儲存可能已經成功。再次儲存可能在相簿中產生重複內容，確定繼續？";
+"storage.title" = "本機儲存失敗";
+"storage.body" = "無法完整寫入媒體或復原記錄。請檢查可用空間，儲存或分享保留的內容後重試。App 不會自動刪除未儲存的副本。";
+"share.failed.title" = "暫時無法分享";
+"share.failed.body" = "請關閉目前的彈出視窗後重試。檔案仍保留在本機媒體中。";
+"privacy.title" = "隱私權政策";
+"privacy.online" = "查看網頁版政策";
+"privacy.body" = "匠鏡隱私權政策\n更新日期：2026年11月3日\n\n相機和麥克風：相機在裝置上提供放大預覽、拍照和錄影。麥克風僅在你開啟錄音時使用。關閉錄音後新錄影不含音軌。\n\n相簿：僅申請新增權限，用於儲存你拍攝的照片和影片。App 不會讀取你的相簿。\n\n本機媒體：擷取檔案和儲存狀態保留在 App 私有目錄中，以便儲存失敗、拒絕授權或中斷後重試。關閉結果畫面不會刪除檔案。你可以在「本機媒體」中分享、重試儲存或明確丟棄。副本保留至你丟棄或移除 App；已經儲存到系統相簿或分享到其他 App 的副本由相應 App 管理。未完成封裝的影片可能無法復原。\n\n分享：僅在你主動使用系統分享面板時，將選定內容交給你選擇的 App 或服務；其後處理適用對方的隱私權政策。\n\nApp 不要求帳號，不包含廣告、追蹤或分析 SDK，不向開發者上傳照片、影片、音訊或使用記錄。系統相簿、iCloud 和所選分享服務的同步由系統及相應服務設定決定。相機、麥克風和相簿權限可以在系統設定中更改。";

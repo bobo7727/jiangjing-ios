@@ -3,10 +3,11 @@ options:
   bundleIdPrefix: com.jiangjing
   deploymentTarget:
     iOS: "16.0"
-  developmentLanguage: zh-Hans
+  developmentLanguage: en
   knownRegions:
-    - zh-Hans
     - en
+    - zh-Hans
+    - zh-Hant
   createIntermediateGroups: true
   groupSortPosition: top
 settings:

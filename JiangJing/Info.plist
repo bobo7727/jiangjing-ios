@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>zh-Hans</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>匠镜</string>
+	<string>JiangJing Magnifier</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -14,11 +14,12 @@
 	<string>6.0</string>
 	<key>CFBundleLocalizations</key>
 	<array>
-		<string>zh-Hans</string>
 		<string>en</string>
+		<string>zh-Hans</string>
+		<string>zh-Hant</string>
 	</array>
 	<key>CFBundleName</key>
-	<string>匠镜</string>
+	<string>JiangJing Magnifier</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -32,11 +33,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>需要使用相机，把屏幕当成放大镜，看清细小零件，并拍下照片和视频。</string>
+	<string>The camera is used as a magnifier so you can see fine detail and capture photos and video.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>打开录像声音时，需要使用麦克风收录环境声。</string>
+	<string>The microphone is used only when you turn on sound for a video recording.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>需要把放大后的照片和视频保存到相册，方便发给客户或朋友。</string>
+	<string>Photos and videos of the magnified view are saved to your library so you can send them to customers or friends.</string>
 	<key>JiangJingPrivacyPolicyURL_en</key>
 	<string></string>
 	<key>JiangJingPrivacyPolicyURL_zh</key>
