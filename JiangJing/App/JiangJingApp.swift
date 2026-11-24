@@ -3,12 +3,16 @@ import UIKit
 
 @main
 struct JiangJingApp: App {
+    @StateObject private var store = StoreManager()
+
     var body: some Scene {
         WindowGroup {
             MagnifierScreen()
                 .preferredColorScheme(.dark)
                 .tint(CraftColor.amber)
                 .modifier(KeepScreenAwake())
+                .environmentObject(store)
+                .task { store.begin() }
         }
     }
 }

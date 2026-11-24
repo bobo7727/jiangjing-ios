@@ -1,0 +1,62 @@
+{
+  "identifier": "7C1A0F3E",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "0.99",
+      "familyShareable": false,
+      "internalID": "6B1D2A01",
+      "localizations": [
+        {
+          "description": "A thank-you. Unlocks nothing.",
+          "displayName": "Tip the Developer",
+          "locale": "en_US"
+        },
+        {
+          "description": "表示感谢，不解锁任何功能。",
+          "displayName": "打赏开发者",
+          "locale": "zh_Hans"
+        },
+        {
+          "description": "表達感謝，不會解鎖任何功能。",
+          "displayName": "打賞開發者",
+          "locale": "zh_Hant"
+        }
+      ],
+      "productID": "com.jiangjing.magnifier.tip.small",
+      "referenceName": "Tip - Small",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "2.99",
+      "familyShareable": false,
+      "internalID": "6B1D2A02",
+      "localizations": [
+        {
+          "description": "Add your name or a client label to photos.",
+          "displayName": "Magnifier Pro",
+          "locale": "en_US"
+        },
+        {
+          "description": "给照片加上你的名字或客户名。一次购买。",
+          "displayName": "匠镜 Pro",
+          "locale": "zh_Hans"
+        },
+        {
+          "description": "為照片加上你的名字或客戶名稱。一次購買。",
+          "displayName": "匠鏡 Pro",
+          "locale": "zh_Hant"
+        }
+      ],
+      "productID": "com.jiangjing.magnifier.pro",
+      "referenceName": "Magnifier Pro",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": {},
+  "subscriptionGroups": [],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}

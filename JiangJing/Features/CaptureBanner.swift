@@ -78,6 +78,8 @@ struct FreezeOverlay: View {
     var onShare: () -> Void
     var onContinue: () -> Void
     var onSettings: () -> Void
+    var onLabel: () -> Void
+    @EnvironmentObject private var store: StoreManager
 
     var body: some View {
         VStack(spacing: 16) {
@@ -94,6 +96,20 @@ struct FreezeOverlay: View {
                 }
                 .buttonStyle(CraftButtonStyle())
                 .accessibilityLabel(L10n.a11yShare)
+                Button(action: onLabel) {
+                    HStack(spacing: 8) {
+                        Label(L10n.labelAdd, systemImage: "textformat")
+                        if store.showsProBadge {
+                            Text("PRO")
+                                .font(.caption2.weight(.heavy))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(CraftColor.amber, in: Capsule())
+                                .foregroundStyle(.black)
+                        }
+                    }
+                }
+                .buttonStyle(CraftButtonStyle(prominent: false))
                 if library.record(photo.id)?.saveState == .denied {
                     Button(L10n.actionSettings, action: onSettings)
                         .buttonStyle(CraftButtonStyle(prominent: false))

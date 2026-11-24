@@ -81,4 +81,45 @@
 "share.failed.body" = "請關閉目前的彈出視窗後重試。檔案仍保留在本機媒體中。";
 "privacy.title" = "隱私權政策";
 "privacy.online" = "查看網頁版政策";
-"privacy.body" = "匠鏡隱私權政策\n更新日期：2026年11月3日\n\n相機和麥克風：相機在裝置上提供放大預覽、拍照和錄影。麥克風僅在你開啟錄音時使用。關閉錄音後新錄影不含音軌。\n\n相簿：僅申請新增權限，用於儲存你拍攝的照片和影片。App 不會讀取你的相簿。\n\n本機媒體：擷取檔案和儲存狀態保留在 App 私有目錄中，以便儲存失敗、拒絕授權或中斷後重試。關閉結果畫面不會刪除檔案。你可以在「本機媒體」中分享、重試儲存或明確丟棄。副本保留至你丟棄或移除 App；已經儲存到系統相簿或分享到其他 App 的副本由相應 App 管理。未完成封裝的影片可能無法復原。\n\n分享：僅在你主動使用系統分享面板時，將選定內容交給你選擇的 App 或服務；其後處理適用對方的隱私權政策。\n\nApp 不要求帳號，不包含廣告、追蹤或分析 SDK，不向開發者上傳照片、影片、音訊或使用記錄。系統相簿、iCloud 和所選分享服務的同步由系統及相應服務設定決定。相機、麥克風和相簿權限可以在系統設定中更改。";
+"privacy.body" = "匠鏡隱私權政策\n更新日期：2026年11月23日\n\n相機和麥克風：相機在裝置上提供放大預覽、拍照和錄影。麥克風僅在你開啟錄音時使用。關閉錄音後新錄影不含音軌。\n\n相簿：僅申請新增權限，用於儲存你拍攝的照片和影片。App 不會讀取你的相簿。\n\n本機媒體：擷取檔案和儲存狀態保留在 App 私有目錄中，以便儲存失敗、拒絕授權或中斷後重試。關閉結果畫面不會刪除檔案。你可以在「本機媒體」中分享、重試儲存或明確丟棄。副本保留至你丟棄或移除 App；已經儲存到系統相簿或分享到其他 App 的副本由相應 App 管理。未完成封裝的影片可能無法復原。\n\n分享：僅在你主動使用系統分享面板時，將選定內容交給你選擇的 App 或服務；其後處理適用對方的隱私權政策。\n\n購買：打賞和可選的 Pro 都是透過 App Store 由 Apple 處理的內購。App 不會收集或接收你的付款資訊或 Apple ID，只會向 App Store 查詢購買在你的裝置上是否有效。打賞不會解鎖任何功能；Pro 只解鎖照片標籤功能，其他功能維持免費。\n\n標籤：開通 Pro 後，可以為照片的副本加上你的名字或客戶名稱。標籤在本機繪製；原圖會保留，帶標籤的副本和每次拍攝一樣儲存到相簿；上次的標籤文字、日期選項和位置只保存在本裝置。\n\nApp 不要求帳號，不包含廣告、追蹤或分析 SDK，不向開發者上傳照片、影片、音訊或使用記錄。系統相簿、iCloud 和所選分享服務的同步由系統及相應服務設定決定。相機、麥克風和相簿權限可以在系統設定中更改。";
+
+/* Support and purchases */
+"support.title" = "支持匠鏡";
+"support.body" = "匠鏡可以免費使用。若對你有幫助，可以打賞一次。打賞是一次性的，可以重複，不會解鎖任何功能，也不會改變應用程式。";
+"support.tipButton" = "打賞 %@";
+"support.notRestorable" = "打賞是一次性的，無法恢復。";
+"support.loading" = "正在載入商店…";
+"a11y.support" = "支持開發者";
+"store.notice.tipThanks" = "謝謝你的支持。";
+"store.notice.pending" = "等待核准中（家人共享的購買請求）。";
+"store.notice.failed" = "購買沒有完成，請稍後再試。";
+"store.notice.unverified" = "Apple 無法驗證這次購買，未解鎖任何內容。";
+"store.notice.unavailable" = "商店暫時無法使用，請稍後再試。";
+"store.retry" = "重試";
+
+/* Pro and label stamp */
+"pro.title" = "像專業人士一樣發給客戶";
+"pro.body" = "傳送前為照片加上你的名字或客戶名稱。一次購買，不是訂閱。標籤在本機產生。";
+"pro.unlock" = "解鎖 Pro — %@";
+"pro.restore" = "恢復購買";
+"pro.notNow" = "以後再說";
+"pro.stillFree" = "現有拍照、錄影和所有既有功能維持免費。";
+"pro.unlocked" = "已解鎖 Pro，謝謝。";
+"support.proTitle" = "匠鏡 Pro";
+"support.proBody" = "為照片加上你的名字或客戶名稱。一次購買，不是訂閱，既有功能維持免費。";
+"store.notice.restoreNone" = "這個 Apple ID 下找不到先前的購買。";
+"store.notice.restored" = "已恢復購買。";
+"store.notice.proUnlocked" = "已解鎖 Pro，謝謝。";
+"label.add" = "加標籤";
+"label.title" = "標籤";
+"label.placeholder" = "你的名字或客戶名稱";
+"label.showDate" = "顯示日期";
+"label.position" = "位置";
+"label.bottomLeft" = "左下";
+"label.bottomRight" = "右下";
+"label.export" = "儲存並分享帶標籤的照片";
+"label.originalKept" = "原圖會保留，不帶標籤。帶標籤的副本也會儲存到相簿。";
+"label.checking" = "正在確認購買狀態…";
+"label.checkFailed" = "暫時無法確認購買狀態。請重試，或恢復購買。";
+"label.failed" = "無法產生帶標籤的照片，請重試。";
+"label.preview" = "帶標籤照片的預覽";

@@ -9,6 +9,9 @@ struct MagnifierScreen: View {
     @State private var showHint = true
     @State private var showLibrary = false
     @State private var showPrivacy = false
+    @State private var showSupport = false
+    @State private var labelPhoto: FrozenPhoto?
+    @State private var pendingShareID: UUID?
 
     var body: some View {
         ZStack {
@@ -33,6 +36,10 @@ struct MagnifierScreen: View {
                 Button { showPrivacy = true } label: {
                     Label(L10n.privacyTitle, systemImage: "hand.raised")
                 }
+                Button { showSupport = true } label: {
+                    Label(L10n.supportTitle, systemImage: "heart")
+                }
+                .accessibilityLabel(L10n.a11ySupport)
             }
             .labelStyle(.iconOnly)
             .font(.title2)
@@ -42,6 +49,19 @@ struct MagnifierScreen: View {
         }
         .sheet(isPresented: $showLibrary) { MediaLibraryView(library: model.media) }
         .sheet(isPresented: $showPrivacy) { PrivacyPolicyView() }
+        .sheet(isPresented: $showSupport) { SupportView() }
+        .sheet(item: $labelPhoto, onDismiss: {
+            // Share only after the editor sheet has really gone, so ShareCenter is not rejected mid-transition.
+            if let id = pendingShareID {
+                pendingShareID = nil
+                model.media.share(id)
+            }
+        }) { photo in
+            LabelEditorView(photo: photo, media: model.media) { id in
+                pendingShareID = id
+                labelPhoto = nil
+            }
+        }
         .alert(
             model.alert?.title ?? "",
             isPresented: alertPresented,
@@ -200,7 +220,8 @@ struct MagnifierScreen: View {
                     library: model.media,
                     onShare: { model.media.share(photo.id) },
                     onContinue: { model.dismissFreeze() },
-                    onSettings: openSettings
+                    onSettings: openSettings,
+                    onLabel: { labelPhoto = photo }
                 )
             } else {
                 ControlBar(model: model)

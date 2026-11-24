@@ -67,12 +67,13 @@ class BuildValidationTests(unittest.TestCase):
         (self.app / 'PrivacyInfo.xcprivacy').write_bytes(plistlib.dumps(self.privacy(reasons=('E174.1',))))
         self.assertNotEqual(self.verify().returncode, 0)
 
-    def test_source_manifest_declares_disk_space_reason(self):
+    def test_source_manifest_declares_disk_space_and_user_defaults_reasons(self):
         with (ROOT / 'JiangJing/PrivacyInfo.xcprivacy').open('rb') as stream:
             manifest = plistlib.load(stream)
         entries = manifest['NSPrivacyAccessedAPITypes']
         self.assertEqual([(e['NSPrivacyAccessedAPIType'], e['NSPrivacyAccessedAPITypeReasons']) for e in entries],
-                         [('NSPrivacyAccessedAPICategoryDiskSpace', ['85F4.1'])])
+                         [('NSPrivacyAccessedAPICategoryDiskSpace', ['85F4.1']),
+                          ('NSPrivacyAccessedAPICategoryUserDefaults', ['CA92.1'])])
 
     def test_raised_deployment_target_fails(self):
         self.info['MinimumOSVersion'] = '17.0'

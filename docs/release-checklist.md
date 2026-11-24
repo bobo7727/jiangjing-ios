@@ -6,10 +6,10 @@
 
 ### 项目身份与版本
 
-仓库依据：[工程描述](../project.yml)、[Info.plist](../JiangJing/Info.plist)。应用使用 SwiftUI，面向 iPhone、iOS 16+，固定竖屏；Bundle ID 为 `com.jiangjing.magnifier`，当前营销版本为 `1.0.1`，仓库默认构建号为 `1`。
+仓库依据：[工程描述](../project.yml)、[Info.plist](../JiangJing/Info.plist)。应用使用 SwiftUI，面向 iPhone、iOS 16+，固定竖屏；Bundle ID 为 `com.jiangjing.magnifier`，当前营销版本为 `1.1.0`，仓库默认构建号为 `1`。
 
 - [ ] 核对本次提交、应用名称、Bundle ID、目标平台及最低系统版本，确认 ASC（App Store Connect）应用记录属于正确团队。
-- [ ] 营销版本使用 `MARKETING_VERSION`，对应 `CFBundleShortVersionString`；首版为 `1.0.0`，当前 `1.0.1`（存储提示版），后续按实际发布版本递增，并与 ASC 版本记录一致。
+- [ ] 营销版本使用 `MARKETING_VERSION`，对应 `CFBundleShortVersionString`；首版为 `1.0.0`，`1.0.1`（存储提示版），当前 `1.1.0`（打赏版），后续按实际发布版本递增，并与 ASC 版本记录一致。
 - [ ] 发布构建号使用 Codemagic 提供的正整数 `PROJECT_BUILD_NUMBER`，工作流通过 `agvtool` 写入 `CURRENT_PROJECT_VERSION` / `CFBundleVersion`。上传前与 ASC 历史记录核对，确保递增且未使用；重新上传新包应使用新构建号，不能只依赖仓库默认值或假定 CI 编号永不重置。
 
 ### 隐私政策网址：TestFlight 前置条件
@@ -43,7 +43,7 @@
 | --- | --- | --- | --- |
 | `NSCameraUsageDescription` | 需要使用相机，把屏幕当成放大镜，看清细小零件，并拍下照片和视频。 | The camera is used as a magnifier so you can see fine detail and capture photos and video. | 首次点击“允许使用相机”后请求相机授权 |
 | `NSMicrophoneUsageDescription` | 打开录像声音时，需要使用麦克风收录环境声。 | The microphone is used only when you turn on sound for a video recording. | 用户开启录像声音时请求；默认关闭 |
-| `NSPhotoLibraryAddUsageDescription` | 需要把放大后的照片和视频保存到相册，方便发给客户或朋友。 | Photos and videos of the magnified view are saved to your library so you can send them to customers or friends. | 首次保存采集内容到相册时请求；首次授权延后至前台 |
+| `NSPhotoLibraryAddUsageDescription` | 需要把你拍摄的照片和视频（包括加了标签的照片副本）保存到相册，方便发给客户或朋友。 | Photos and videos you capture, including labeled copies of photos, are saved to your library so you can send them to customers or friends. | 首次保存采集内容到相册时请求；首次授权延后至前台 |
 
 - [ ] 在中英文真机上核对弹窗实际文本、触发时机和拒绝后的提示/设置入口。
 - [ ] 确认相册仍使用 [PhotoLibrarySaver](../JiangJing/Media/PhotoLibrarySaver.swift) 的 `.addOnly`，无需读取整个相册；保存被拒绝后仍能保留本机文件并主动分享/重试。
@@ -52,7 +52,7 @@
 ### 出口合规及按需项目
 
 - [ ] 核查最终包及依赖的加密行为与 `ITSAppUsesNonExemptEncryption = false` 一致，即不使用非豁免加密。若 ASC 仍要求补充信息，按实际加密用途逐题回答；不要把该值误读为完全不使用任何加密。[Apple 出口合规说明](https://developer.apple.com/help/app-store-connect/manage-app-information/overview-of-export-compliance/)
-- [ ] 当前无追踪/广告/内购实现，ATT、广告标识符、广告 SDK 合规和恢复购买均标为“不适用”。若以后引入相关功能，再核查 ATT 的实际触发条件、隐私申报、广告内容和内购/恢复流程；不因使用相机就申请 ATT。
+- [ ] 当前无追踪和广告实现，ATT、广告标识符、广告 SDK 合规标为“不适用”。**应用含自愿打赏（消耗型内购，不解锁任何功能）**：按 [内购设置](iap-setup.md) 在 ASC 建好商品并随版本送审；打赏不可恢复，页面已说明。若以后引入 Pro（非消耗型），须同时核查恢复购买入口（付费墙与支持页）。
 
 ### App 图标与打包资源
 
