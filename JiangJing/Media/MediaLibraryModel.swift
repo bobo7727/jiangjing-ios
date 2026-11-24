@@ -8,18 +8,24 @@ final class MediaLibraryModel: ObservableObject {
     @Published private(set) var records: [MediaRecord] = []
     @Published var storageError = false
     @Published var shareError = false
+    /// Display-only sizes in bytes by record, and the device's free-space estimate.
+    @Published private(set) var usage: [UUID: Int64] = [:]
+    @Published private(set) var availableBytes: Int64?
     private let journal: MediaJournal
     private let isActive: @MainActor () -> Bool
     private let saveFile: @MainActor (URL, MediaRecord.Kind) async throws -> Void
+    private let availableCapacity: @Sendable () -> Int64?
     private var leases = MediaLeases()
     private var saving: Set<UUID> = []
     private var verifying: Set<UUID> = []
+    private var storageRefreshGeneration = 0
 
     convenience init() {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("PendingMedia", isDirectory: true)
         self.init(journal: MediaJournal(directory: root),
                   isActive: { UIApplication.shared.applicationState == .active },
+                  availableCapacity: { MediaLibraryModel.deviceAvailableCapacity() },
                   saveFile: { try await PhotoLibrarySaver.saveFile(at: $0, kind: $1) })
         do {
             var resource = root
@@ -34,12 +40,44 @@ final class MediaLibraryModel: ObservableObject {
 
     /// Test seam for delayed Photos completions, denied access and inactivity.
     init(journal: MediaJournal, isActive: @escaping @MainActor () -> Bool,
+         availableCapacity: @escaping @Sendable () -> Int64? = { nil },
          saveFile: @escaping @MainActor (URL, MediaRecord.Kind) async throws -> Void) {
         self.journal = journal
         self.isActive = isActive
+        self.availableCapacity = availableCapacity
         self.saveFile = saveFile
         do { records = try journal.load() }
         catch { storageError = true }
+    }
+
+    /// Free space the system reports for important (user-initiated) data. It is an
+    /// estimate; the system may purge caches to make more room.
+    nonisolated static func deviceAvailableCapacity() -> Int64? {
+        let values = try? URL(fileURLWithPath: NSHomeDirectory())
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage
+    }
+
+    var totalUsage: Int64 { StorageSpace.total(usage) }
+    var isLowSpace: Bool { StorageSpace.isLow(available: availableBytes) }
+
+    /// Measures files off the main actor; never blocks the UI and never deletes.
+    func refreshStorage() async {
+        storageRefreshGeneration += 1
+        let generation = storageRefreshGeneration
+        let journal = journal
+        let snapshot = records
+        let capacity = availableCapacity
+        let (sizes, available) = await Task.detached(priority: .utility) {
+            var sizes: [UUID: Int64] = [:]
+            for record in snapshot { sizes[record.id] = journal.diskUsage(of: record) }
+            return (sizes, capacity())
+        }.value
+        // A newer refresh started meanwhile; never let this older measurement win.
+        guard generation == storageRefreshGeneration else { return }
+        let live = Set(records.map(\.id))
+        usage = sizes.filter { live.contains($0.key) }
+        availableBytes = available
     }
 
     func url(for record: MediaRecord) -> URL { journal.url(for: record) }

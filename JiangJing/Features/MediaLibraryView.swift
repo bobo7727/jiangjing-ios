@@ -17,13 +17,32 @@ extension SaveState {
 struct MediaLibraryView: View {
     @ObservedObject var library: MediaLibraryModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var discardID: UUID?
     @State private var retryID: UUID?
+
+    private static func format(_ template: String, _ bytes: Int64) -> String {
+        String(format: template, sizeText(bytes))
+    }
+
+    private static func sizeText(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Text(L10n.mediaRetention).font(.subheadline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Self.format(L10n.mediaStorageTotal, library.totalUsage))
+                    if let available = library.availableBytes {
+                        Text(Self.format(L10n.mediaStorageAvailable, available))
+                    }
+                    if library.isLowSpace {
+                        Text(L10n.mediaLowSpace).foregroundStyle(.orange)
+                    }
+                }
+                .font(.subheadline)
                 ForEach(library.records) { record in
                     VStack(alignment: .leading, spacing: 12) {
                         Label(record.kind == .photo ? L10n.actionPhoto : L10n.actionRecord,
@@ -33,6 +52,7 @@ struct MediaLibraryView: View {
                         Text(record.createdAt, style: .time)
                         Text(record.isComplete ? record.saveState.message : L10n.mediaIncomplete)
                         if let duration = record.duration { Text(ClockFormat.string(from: duration)) }
+                        if let size = library.usage[record.id] { Text(Self.format(L10n.mediaSize, size)) }
                         if record.isComplete {
                             Button(L10n.actionShare) { library.share(record.id) }
                             if record.saveState != .saved && record.saveState != .saving {
@@ -59,6 +79,12 @@ struct MediaLibraryView: View {
                 Button(L10n.actionClose, role: .cancel) {}
             } message: {
                 Text(library.shareError ? L10n.shareFailedBody : L10n.storageBody)
+            }
+            .task { await library.refreshStorage() }
+            .onChange(of: library.records) { _ in Task { await library.refreshStorage() } }
+            // Free space can change while the app is away; re-measure on return.
+            .onChange(of: scenePhase) { phase in
+                if phase == .active { Task { await library.refreshStorage() } }
             }
             .navigationTitle(L10n.mediaTitle)
             .toolbar { Button(L10n.actionClose) { dismiss() } }

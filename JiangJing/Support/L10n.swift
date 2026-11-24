@@ -72,6 +72,11 @@ enum L10n {
     static var mediaDiscard: String { String(localized: "media.discard") }
     static var mediaDiscardConfirm: String { String(localized: "media.discardConfirm") }
     static var mediaDuplicateWarning: String { String(localized: "media.duplicateWarning") }
+    /// Format strings with one `%@` size argument; see `MediaLibraryView`.
+    static var mediaStorageTotal: String { String(localized: "media.storage.total") }
+    static var mediaStorageAvailable: String { String(localized: "media.storage.available") }
+    static var mediaSize: String { String(localized: "media.size") }
+    static var mediaLowSpace: String { String(localized: "media.lowSpace") }
     static var storageTitle: String { String(localized: "storage.title") }
     static var storageBody: String { String(localized: "storage.body") }
     static var shareFailedTitle: String { String(localized: "share.failed.title") }

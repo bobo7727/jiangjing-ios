@@ -5,6 +5,17 @@ import pathlib
 import plistlib
 import sys
 
+DISK_SPACE = 'NSPrivacyAccessedAPICategoryDiskSpace'
+
+
+def assert_disk_space_declared(privacy):
+    """The storage hint reads free space to show the user; Apple requires reason 85F4.1."""
+    entries = [entry for entry in privacy.get('NSPrivacyAccessedAPITypes', [])
+               if entry.get('NSPrivacyAccessedAPIType') == DISK_SPACE]
+    assert len(entries) == 1, 'exactly one DiskSpace declaration required'
+    assert entries[0].get('NSPrivacyAccessedAPITypeReasons') == ['85F4.1'], entries[0]
+
+
 app = pathlib.Path(sys.argv[1])
 with (app / 'Info.plist').open('rb') as stream:
     info = plistlib.load(stream)
@@ -21,5 +32,6 @@ assert info.get('CFBundleIcons', {}).get('CFBundlePrimaryIcon', {}).get('CFBundl
 with (app / 'PrivacyInfo.xcprivacy').open('rb') as stream:
     privacy = plistlib.load(stream)
 assert privacy['NSPrivacyTracking'] is False
+assert_disk_space_declared(privacy)
 print(json.dumps({'bundle': info['CFBundleIdentifier'], 'minimumOS': info['MinimumOSVersion'],
-                  'resources': 'localizations, icons, privacy manifest present'}, indent=2))
+                  'resources': 'localizations, icons, privacy manifest with DiskSpace 85F4.1 present'}, indent=2))

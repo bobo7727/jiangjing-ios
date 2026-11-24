@@ -68,4 +68,26 @@ final class MediaJournalTests: XCTestCase {
         leases.release(id)
         XCTAssertFalse(leases.contains(id))
     }
+
+    func testDiskUsageCountsRetainedFilesAndIgnoresMissing() throws {
+        try withJournal { journal in
+            let photo = MediaRecord(id: UUID(), kind: .photo, createdAt: Date(), isComplete: true, saveState: .pending)
+            try journal.write(photo)
+            let sidecarOnly = journal.diskUsage(of: photo)
+            try Data(repeating: 7, count: 1_000).write(to: journal.url(for: photo))
+            XCTAssertEqual(journal.diskUsage(of: photo), sidecarOnly + 1_000)
+            let missing = MediaRecord(id: UUID(), kind: .video, createdAt: Date(), isComplete: true, saveState: .saved)
+            XCTAssertEqual(journal.diskUsage(of: missing), 0)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: journal.url(for: photo).path)) // measuring never deletes
+        }
+    }
+
+    func testLowSpaceBoundaryAndUnknownCapacity() {
+        XCTAssertFalse(StorageSpace.isLow(available: nil))
+        XCTAssertTrue(StorageSpace.isLow(available: 0))
+        XCTAssertTrue(StorageSpace.isLow(available: StorageSpace.lowSpaceThreshold - 1))
+        XCTAssertFalse(StorageSpace.isLow(available: StorageSpace.lowSpaceThreshold))
+        XCTAssertEqual(StorageSpace.total([UUID(): 5, UUID(): 7]), 12)
+        XCTAssertEqual(StorageSpace.total([:]), 0)
+    }
 }

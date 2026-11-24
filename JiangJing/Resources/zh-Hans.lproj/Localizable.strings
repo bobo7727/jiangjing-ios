@@ -71,6 +71,10 @@
 "media.discard" = "丢弃本机副本";
 "media.discardConfirm" = "确定丢弃？未保存或分享的内容将无法恢复。已写入相册的内容不会被删除。";
 "media.duplicateWarning" = "上次保存可能已经成功。再次保存可能在相册中产生重复内容，确定继续？";
+"media.storage.total" = "本机媒体共占用 %@。";
+"media.storage.available" = "设备约有 %@ 可用空间（估算）。";
+"media.size" = "大小：%@";
+"media.lowSpace" = "可用空间不足，拍照或录像可能保存失败。请先保存或分享需要保留的内容，再丢弃不再需要的本机副本。应用不会自动删除任何内容。";
 "storage.title" = "本机存储失败";
 "storage.body" = "无法完整写入媒体或恢复记录。请检查可用空间，保存或分享保留的内容后重试。应用不会自动删除未保存的副本。";
 "share.failed.title" = "暂时无法分享";

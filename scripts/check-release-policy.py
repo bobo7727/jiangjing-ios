@@ -6,10 +6,14 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+path = Path('JiangJing/Info.plist')
+with path.open('rb') as stream:
+    info = plistlib.load(stream)
 values = {}
 for language in ('en', 'zh'):
     key = f'PRIVACY_POLICY_URL_{language.upper()}'
-    url = os.environ.get(key, '')
+    # An explicit environment variable overrides; otherwise keep the URL already committed in Info.plist.
+    url = os.environ.get(key) or info.get(f'JiangJingPrivacyPolicyURL_{language}', '')
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != 'https' or not parsed.hostname or parsed.hostname.endswith('example.com'):
         raise SystemExit(f'{key}: provide the real public HTTPS privacy policy URL')
@@ -21,9 +25,6 @@ for language in ('en', 'zh'):
         if 'JiangJing' not in body or ('Privacy' not in body and '隐私' not in body):
             raise SystemExit(f'{key}: the returned page does not identify the JiangJing privacy policy')
     values[f'JiangJingPrivacyPolicyURL_{language}'] = url
-path = Path('JiangJing/Info.plist')
-with path.open('rb') as stream:
-    info = plistlib.load(stream)
 info.update(values)
 with path.open('wb') as stream:
     plistlib.dump(info, stream, sort_keys=False)
