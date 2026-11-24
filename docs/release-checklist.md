@@ -6,10 +6,10 @@
 
 ### 项目身份与版本
 
-仓库依据：[工程描述](../project.yml)、[Info.plist](../JiangJing/Info.plist)。应用使用 SwiftUI，面向 iPhone、iOS 16+，固定竖屏；Bundle ID 为 `com.jiangjing.magnifier`，当前营销版本为 `1.0.1`，仓库默认构建号为 `1`。
+仓库依据：[工程描述](../project.yml)、[Info.plist](../JiangJing/Info.plist)。应用使用 SwiftUI，面向 iPhone、iOS 16+，固定竖屏；Bundle ID 为 `com.jiangjing.magnifier`，当前营销版本为 `1.1.0`，仓库默认构建号为 `1`。
 
 - [ ] 核对本次提交、应用名称、Bundle ID、目标平台及最低系统版本，确认 ASC（App Store Connect）应用记录属于正确团队。
-- [ ] 营销版本使用 `MARKETING_VERSION`，对应 `CFBundleShortVersionString`；首版为 `1.0.0`，当前 `1.0.1`（存储提示版），后续按实际发布版本递增，并与 ASC 版本记录一致。
+- [ ] 营销版本使用 `MARKETING_VERSION`，对应 `CFBundleShortVersionString`；首版为 `1.0.0`，`1.0.1`（存储提示版），当前 `1.1.0`（打赏版），后续按实际发布版本递增，并与 ASC 版本记录一致。
 - [ ] 发布构建号使用 Codemagic 提供的正整数 `PROJECT_BUILD_NUMBER`，工作流通过 `agvtool` 写入 `CURRENT_PROJECT_VERSION` / `CFBundleVersion`。上传前与 ASC 历史记录核对，确保递增且未使用；重新上传新包应使用新构建号，不能只依赖仓库默认值或假定 CI 编号永不重置。
 
 ### 隐私政策网址：TestFlight 前置条件
