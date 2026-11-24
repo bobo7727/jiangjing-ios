@@ -43,6 +43,13 @@ enum StoreRules {
             && entitlement.isVerified
             && !entitlement.isRevoked
     }
+
+    /// A pushed update that decides Pro state for this app (grant, or verified refund). Such an update must
+    /// invalidate any in-flight entitlement query even when the resulting status does not change.
+    static func decidesPro(_ entitlement: Entitlement, bundleID: String) -> Bool {
+        guard entitlement.productID == StoreCatalog.proID, entitlement.bundleID == bundleID else { return false }
+        return grantsPro(entitlement, bundleID: bundleID) || (entitlement.isVerified && entitlement.isRevoked)
+    }
 }
 
 /// Tracks `ProStatus`. Only a completed query whose entitlements were all verified can move to `locked`.

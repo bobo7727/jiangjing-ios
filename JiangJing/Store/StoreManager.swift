@@ -103,9 +103,8 @@ final class StoreManager: ObservableObject {
         busy = true
         defer { busy = false }
         let outcome = await backend.purchase(id: StoreCatalog.proID)
-        let before = tracker.status
         tracker.apply(purchase: outcome)
-        if tracker.status != before { entitlementRevision += 1 }
+        if outcome == .success { entitlementRevision += 1 }
         proStatus = tracker.status
         notice = Self.notice(for: outcome, success: .proUnlocked)
     }
@@ -127,9 +126,8 @@ final class StoreManager: ObservableObject {
     private func handle(_ event: StoreEvent) {
         switch event {
         case .entitlement(let entitlement):
-            let before = tracker.status
             tracker.apply(update: entitlement)
-            if tracker.status != before { entitlementRevision += 1 }
+            if StoreRules.decidesPro(entitlement, bundleID: tracker.bundleID) { entitlementRevision += 1 }
             proStatus = tracker.status
         case .tipThanks:
             notice = .tipThanks

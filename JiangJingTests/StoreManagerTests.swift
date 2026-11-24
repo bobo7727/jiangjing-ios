@@ -184,4 +184,20 @@ final class StoreManagerTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 900_000_000) // let the older empty query finish
         XCTAssertEqual(store.proStatus, .unlocked, "an older query finishing after Restore must not relock Pro")
     }
+
+    func testRefundEventWithoutStatusChangeStillInvalidatesOwnedQuery() async {
+        let backend = MockStoreBackend()
+        backend.set(entitlements: .completed([]), delayMilliseconds: 0)
+        let store = makeManager(backend)
+        await store.refreshEntitlements()
+        XCTAssertEqual(store.proStatus, .locked)
+        store.begin()
+        try? await Task.sleep(nanoseconds: 100_000_000) // let the launch query settle (locked)
+        backend.set(entitlements: .completed([proEntitlement()]), delayMilliseconds: 700) // stale owned query
+        let slow = Task { await store.refreshEntitlements() }
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        backend.push(.entitlement(Entitlement(productID: StoreCatalog.proID, bundleID: bundle, isVerified: true, isRevoked: true)))
+        await slow.value
+        XCTAssertEqual(store.proStatus, .locked, "a refund while locked must still outrank an older owned query")
+    }
 }
