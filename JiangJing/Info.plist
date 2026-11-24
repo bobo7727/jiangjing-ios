@@ -39,9 +39,9 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Photos and videos of the magnified view are saved to your library so you can send them to customers or friends.</string>
 	<key>JiangJingPrivacyPolicyURL_en</key>
-	<string></string>
+	<string>https://bobo7727.github.io/jiangjing-ios/privacy/en.html</string>
 	<key>JiangJingPrivacyPolicyURL_zh</key>
-	<string></string>
+	<string>https://bobo7727.github.io/jiangjing-ios/privacy/zh.html</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
